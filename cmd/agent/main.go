@@ -7,38 +7,21 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"agent/pkg/kube"
+	"agent/pkg/logs"
+	"agent/pkg/metrics"
+	"agent/pkg/utils"
+		
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-
-	"agent/pkg/kube"
 )
 
-type FlowEvent struct {
-	SrcIP    uint32
-	DstIP    uint32
-	SrcPort  uint16
-	DstPort  uint16
-	Protocol uint8
-	PktLen   uint64
-	_        [3]byte
-}
-
-func ipToString(ip uint32) string {
-	return fmt.Sprintf("%d.%d.%d.%d",
-		byte(ip),
-		byte(ip>>8),
-		byte(ip>>16),
-		byte(ip>>24))
-}
-
-// Thread-safe structure to track attached cgroups
 type CgroupWatcher struct {
 	mu       sync.Mutex
 	attached map[string]link.Link
@@ -46,8 +29,8 @@ type CgroupWatcher struct {
 
 func (cw *CgroupWatcher) AttachIfNeeded(path string, prog *ebpf.Program, attachType ebpf.AttachType) {
 	cw.mu.Lock()
-	
 	defer cw.mu.Unlock()
+
 	key := path + fmt.Sprintf(":%d", attachType)
 	if _, exists := cw.attached[key]; exists {
 		return
@@ -80,29 +63,8 @@ func (cw *CgroupWatcher) Cleanup() {
 	}
 }
 
-func resolveCgroupFromPID(pid int) string {
-	cgroupFile := fmt.Sprintf("/proc/%d/cgroup", pid)
-	content, err := os.ReadFile(cgroupFile)
-	if err != nil {
-		log.Printf("⚠️ Could not read cgroup file for PID %d: %v", pid, err)
-		return ""
-	}
-
-	for _, line := range strings.Split(string(content), "\n") {
-		fields := strings.SplitN(line, ":", 3)
-		if len(fields) == 3 && strings.Contains(fields[2], "kubepods") {
-			path := filepath.Join("/sys/fs/cgroup", fields[2])
-			if _, err := os.Stat(path); err == nil {
-				return path
-			}
-		}
-	}
-	log.Printf("⚠️ PID %d has no valid kubepods cgroup", pid)
-	return ""
-}
-
 func main() {
-	log.Println("🚀 Starting traffic monitor agent...")
+	log.Println("🚀 Starting SecureFlow agent...")
 
 	spec, err := ebpf.LoadCollectionSpec("bpf/traffic.bpf.o")
 	if err != nil {
@@ -122,35 +84,75 @@ func main() {
 	defer objs.MonitorEgress.Close()
 	defer objs.Events.Close()
 
-	watcher := &CgroupWatcher{
-		attached: make(map[string]link.Link),
-	}
+	watcher := &CgroupWatcher{attached: make(map[string]link.Link)}
 
-	// Background PID → cgroup → attach mapping loop
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(120 * time.Second)
 		defer ticker.Stop()
-
-		for range ticker.C {
+	
+		attach := func() {
 			log.Println("🔄 Syncing container PIDs and attaching BPF...")
 			mappings, err := kube.FetchContainerMappings()
 			if err != nil {
 				log.Printf("❌ Failed to fetch container mappings: %v", err)
-				continue
+				return
 			}
-
+	
 			for _, m := range mappings {
-				log.Printf("🧩 Resolving cgroup for container %s (pod %s/%s)", m.ContainerID, m.Namespace, m.PodName)
-				cgroupPath := resolveCgroupFromPID(m.PID)
-				if cgroupPath != "" {
+				log.Printf("🔍 Mapping: %s/%s (container: %s)", m.Namespace, m.PodName, m.ContainerID)
+				cgroupPath,err := utils.ResolvePathForPID(m.PID)
+				if err == nil {
 					watcher.AttachIfNeeded(cgroupPath, objs.MonitorIngress, ebpf.AttachCGroupInetIngress)
 					watcher.AttachIfNeeded(cgroupPath, objs.MonitorEgress, ebpf.AttachCGroupInetEgress)
 				}
 			}
 		}
+	
+		// Run immediately
+		attach()
+	
+		// Then repeat on every tick
+		for range ticker.C {
+			attach()
+		}
 	}()
+	
 
-	// Ring buffer reader
+	// Async resource logging
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+	
+		collect := func() {
+			mappings, err := kube.FetchContainerMappings()
+			if err != nil {
+				log.Printf("⚠️ Failed to fetch container mappings: %v", err)
+				return
+			}
+	
+			for _, m := range mappings {
+				if mem, err := metrics.GetMemoryUsage(m.ContainerID,m.PID); err == nil {
+					logs.LogMemory(mem)
+				}
+				if cpu, err := metrics.GetCPUUsage(m.ContainerID,m.PID); err == nil {
+					logs.LogCPU(cpu)
+				}
+				if disk, err := metrics.GetDiskIOUsage(m.ContainerID,m.PID); err == nil {
+					logs.LogDisk(disk)
+				}
+			}
+		}
+	
+		// Run immediately
+		collect()
+	
+		// Then run every tick
+		for range ticker.C {
+			collect()
+		}
+	}()
+	
+
 	reader, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
 		log.Fatalf("❌ Failed to open ring buffer: %v", err)
@@ -169,7 +171,6 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Main loop to consume events
 	for {
 		record, err := reader.Read()
 		if err != nil {
@@ -177,16 +178,13 @@ func main() {
 			break
 		}
 
-		var event FlowEvent
+		var event logs.TrafficInfo
 		err = binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event)
 		if err != nil {
 			log.Printf("❌ Failed to decode event: %v", err)
 			continue
 		}
 
-		log.Printf("📡 %s:%d → %s:%d | proto: %d | size: %d bytes",
-			ipToString(event.SrcIP), event.SrcPort,
-			ipToString(event.DstIP), event.DstPort,
-			event.Protocol, event.PktLen)
+		logs.LogTraffic(&event)
 	}
 }
