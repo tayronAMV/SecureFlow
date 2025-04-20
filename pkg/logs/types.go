@@ -37,6 +37,6 @@ type TrafficInfo struct {
 	SrcPort  uint16
 	DstPort  uint16
 	Protocol uint8
+	_        [3]byte // padding because correct reading from c struct ( trrafic.h) 
 	PktLen   uint64
-	_        [3]byte // Padding
 }
