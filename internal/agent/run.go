@@ -28,6 +28,7 @@ var (
 )
 
 func Start() {
+	
 	spec, err := ebpf.LoadCollectionSpec("bpf/traffic.bpf.o")
 	if err != nil {
 		log.Fatalf("❌ Failed to load BPF spec: %v", err)
@@ -38,12 +39,14 @@ func Start() {
 	}
 
 	cw = New()
+	startSyscallMonitor()
 	startAttacher()
 	startResourceCollector()
 	startEventReader()
 }
 
 func Stop() {
+	stopSyscallMonitor()
 	if reader != nil {
 		reader.Close()
 	}
@@ -54,7 +57,7 @@ func Stop() {
 
 func startAttacher() {
 	go func() {
-		ticker := time.NewTicker(120 * time.Second)
+		ticker := time.NewTicker(10000 * time.Second)
 		defer ticker.Stop()
 
 		attach := func() {
@@ -64,7 +67,9 @@ func startAttacher() {
 				log.Printf("❌ Failed to fetch container mappings: %v", err)
 				return
 			}
+			monitoredPIDs = make(map[uint32]bool) 
 			for _, m := range mappings {
+				monitoredPIDs[uint32(m.PID)] = true
 				cgPath, err := utils.ResolvePathForPID(m.PID)
 				if err == nil {
 					cw.AttachIfNeeded(cgPath, objs.MonitorIngress, ebpf.AttachCGroupInetIngress)
@@ -82,7 +87,7 @@ func startAttacher() {
 
 func startResourceCollector() {
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(10000 * time.Second)
 		defer ticker.Stop()
 
 		collect := func() {
@@ -91,8 +96,9 @@ func startResourceCollector() {
 				log.Printf("⚠️ Failed to fetch container mappings: %v", err)
 				return
 			}
-
+			monitoredPIDs = make(map[uint32]bool)  
 			for _, m := range mappings {
+				monitoredPIDs[uint32(m.PID)] = true
 				if mem, err := metrics.GetMemoryUsage(m.ContainerID, m.PID); err == nil {
 					logs.LogMemory(mem)
 				}

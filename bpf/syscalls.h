@@ -15,6 +15,6 @@
 struct syscall_event_t {
     u32 pid;           // PID of the process that made the syscall
     u32 type;          // Type of syscall (values 1–9 based on defined constants)
-    char comm[16];     // Name of the process (from task_struct->comm)
+    char comm[TASK_COMM_LEN];     // Name of the process (from task_struct->comm)
     char filename[256]; // Target file or path used in the syscall (e.g., file opened, binary executed)    
 };

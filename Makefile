@@ -1,11 +1,13 @@
 BPF_CLANG = clang
 BPF_CFLAGS = -O2 -g -Wall -target bpf -D__TARGET_ARCH_x86 -I$(PWD)/bpf
 
-BPF_OBJ = bpf/traffic.bpf.o
+BPF_OBJS = \
+	bpf/traffic.bpf.o \
+	bpf/syscalls.bpf.o
 
-all: $(BPF_OBJ)
+all: $(BPF_OBJS)
 
-$(BPF_OBJ): bpf/traffic.bpf.c bpf/traffic.h bpf/vmlinux.h
+bpf/%.bpf.o: bpf/%.bpf.c bpf/%.h bpf/vmlinux.h
 	$(BPF_CLANG) $(BPF_CFLAGS) -c $< -o $@
 
 clean:

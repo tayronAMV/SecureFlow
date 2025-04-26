@@ -14,17 +14,20 @@ struct {
 } syscall_events SEC(".maps");
 
 // -----------------------------
-// EXECUTION: execve via LSM
+// EXECUTION: execve via tracepoint
 // -----------------------------
-SEC("lsm/bprm_check")
-int log_execve(struct linux_binprm *bprm)
+SEC("tracepoint/syscalls/sys_enter_execve")
+int log_execve(struct trace_event_raw_sys_enter *ctx)
 {
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
     event.type = EVENT_EXECVE;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    bpf_probe_read_user_str(event.filename, sizeof(event.filename), bprm->filename);
+    
+    const char *user_filename = (const char *)ctx->args[0];  // arg0 = filename
+    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -40,44 +43,48 @@ int log_execveat(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_EXECVEAT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    const char *pathname = (const char *)ctx->args[1];
-    bpf_probe_read_user_str(event.filename, sizeof(event.filename), pathname);
+    
+    const char *user_filename = (const char *)ctx->args[1];  // arg1 = pathname
+    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
 
 // -----------------------------
-// FILE OPERATIONS: open via LSM
+// FILE OPERATIONS: open via tracepoint
 // -----------------------------
-// LSM hook file_open has two params: struct file *file, const struct cred *ctx
-SEC("lsm/file_open")
-int log_open(struct file *file, const struct cred *ctx)
+SEC("tracepoint/syscalls/sys_enter_openat")
+int log_open(struct trace_event_raw_sys_enter *ctx)
 {
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
     event.type = EVENT_OPEN;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    // file->f_path.dentry->d_name.name is a char *
-    bpf_probe_read_kernel_str(event.filename, sizeof(event.filename), 
-        file->f_path.dentry->d_name.name);
+    
+    const char *user_filename = (const char *)ctx->args[1];  // arg1 = pathname
+    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
 
 // -----------------------------
-// FILE OPERATIONS: unlink via LSM
+// FILE OPERATIONS: unlink via tracepoint
 // -----------------------------
-SEC("lsm/inode_unlink")
-int log_unlink(struct inode *dir, struct dentry *dentry)
+SEC("tracepoint/syscalls/sys_enter_unlinkat")
+int log_unlink(struct trace_event_raw_sys_enter *ctx)
 {
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
     event.type = EVENT_UNLINK;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    bpf_probe_read_kernel_str(event.filename, sizeof(event.filename), 
-        dentry->d_name.name);
+    
+    const char *user_filename = (const char *)ctx->args[1];  // arg1 = pathname
+    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -93,8 +100,10 @@ int log_chmod(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_CHMOD;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    const char *path = (const char *)ctx->args[0];
+    
+    const char *path = (const char *)ctx->args[0];  // arg0 = pathname
     bpf_probe_read_user_str(event.filename, sizeof(event.filename), path);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -110,8 +119,10 @@ int log_mount(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_MOUNT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
-    const char *target = (const char *)ctx->args[1];
+    
+    const char *target = (const char *)ctx->args[1];  // arg1 = target
     bpf_probe_read_user_str(event.filename, sizeof(event.filename), target);
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -127,6 +138,7 @@ int log_setuid(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_SETUID;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -142,6 +154,7 @@ int log_socket(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_SOCKET;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }
@@ -157,6 +170,7 @@ int log_connect(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.type = EVENT_CONNECT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
 }

@@ -52,3 +52,34 @@ func LogDisk(disk *DiskIOUsage) {
 func ipToString(ip [4]byte) string {
 	return fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 }
+
+
+
+func LogSyscall(pid uint32, eventType uint32, comm string, filename string) {
+	log.Printf("🔍 [PID %d] %s %s %s", pid, decodeSyscallType(eventType), comm, filename)
+}
+
+func decodeSyscallType(t uint32) string {
+	switch t {
+	case 1:
+		return "execve"
+	case 2:
+		return "execveat"
+	case 3:
+		return "open"
+	case 4:
+		return "unlink"
+	case 5:
+		return "chmod"
+	case 6:
+		return "mount"
+	case 7:
+		return "setuid"
+	case 8:
+		return "socket"
+	case 9:
+		return "connect"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
+	}
+}

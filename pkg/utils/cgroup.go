@@ -3,7 +3,7 @@ package utils
 
 import (
   "fmt"
-  "log"
+  // "log"
   "os"
   "path/filepath"
   "strings"
@@ -11,7 +11,7 @@ import (
 
 // ResolvePathForPID returns the full cgroup v2 path for a given PID.
 func ResolvePathForPID(pid int) (string, error) {
-  log.Printf("🔍 Resolving cgroup for PID %d", pid)
+  
   data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
   if err != nil {
     return "", fmt.Errorf("could not read cgroup file for PID %d: %w", pid, err)
