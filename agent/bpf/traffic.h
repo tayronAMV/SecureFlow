@@ -35,6 +35,8 @@ struct flow_event_t {
             __u8 icmp_type;     // ICMP type (e.g. Echo, Time Exceeded)
         } icmp;
     };
+
+    __u32 pid ; 
 };
 
 #endif // __TRAFFIC_H__

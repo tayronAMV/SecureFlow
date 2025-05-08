@@ -71,12 +71,12 @@ func StartTrraficCollector() {
 				break
 			}
 
-			var event logs.TrafficInfo
+			var event logs.FlowEvent
 			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
 				log.Printf("❌ Failed to decode event: %v", err)
 				continue
 			}
-			logs.LogTraffic(&event)
+			
 		}
 	}()
 }
