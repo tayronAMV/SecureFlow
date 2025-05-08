@@ -26,14 +26,7 @@ const (
 	colorPurple = "\033[35m"
 )
 
-// Traffic Event (Blue)
-func LogTraffic(event *TrafficInfo) {
-	log.Printf(colorBlue+"📡 %s:%d → %s:%d | proto: %d | size: %d bytes "+colorReset,
-		ipToString(event.SrcIP), event.SrcPort,
-		ipToString(event.DstIP), event.DstPort,
-		event.Protocol, event.PktLen,
-	)
-}
+
 
 // Memory Usage (Green)
 func LogMemory(mem *MemoryUsage) {

@@ -1,4 +1,4 @@
-package agent
+package internal
 
 import (
 	"bytes"
@@ -22,9 +22,9 @@ type syscallEvent struct {
 	Filename [256]byte
 }
 
-var monitoredPIDs map[uint32]bool 
+var syscallEventsMap *ebpf.Map
 
-func startSyscallMonitor() {
+func InitSyscallMonitor() {
 	spec, err := ebpf.LoadCollectionSpec("bpf/syscalls.bpf.o")
 	if err != nil {
 		log.Printf("❌ Failed to load syscall BPF spec: %v", err)
@@ -32,15 +32,15 @@ func startSyscallMonitor() {
 	}
 
 	objs := struct {
-		LogExecve    *ebpf.Program `ebpf:"log_execve"`
-		LogExecveat  *ebpf.Program `ebpf:"log_execveat"`
-		LogOpen      *ebpf.Program `ebpf:"log_open"`
-		LogUnlink    *ebpf.Program `ebpf:"log_unlink"`
-		LogChmod     *ebpf.Program `ebpf:"log_chmod"`
-		LogMount     *ebpf.Program `ebpf:"log_mount"`
-		LogSetuid    *ebpf.Program `ebpf:"log_setuid"`
-		LogSocket    *ebpf.Program `ebpf:"log_socket"`
-		LogConnect   *ebpf.Program `ebpf:"log_connect"`
+		LogExecve     *ebpf.Program `ebpf:"log_execve"`
+		LogExecveat   *ebpf.Program `ebpf:"log_execveat"`
+		LogOpen       *ebpf.Program `ebpf:"log_open"`
+		LogUnlink     *ebpf.Program `ebpf:"log_unlink"`
+		LogChmod      *ebpf.Program `ebpf:"log_chmod"`
+		LogMount      *ebpf.Program `ebpf:"log_mount"`
+		LogSetuid     *ebpf.Program `ebpf:"log_setuid"`
+		LogSocket     *ebpf.Program `ebpf:"log_socket"`
+		LogConnect    *ebpf.Program `ebpf:"log_connect"`
 		SyscallEvents *ebpf.Map     `ebpf:"syscall_events"`
 	}{}
 
@@ -49,9 +49,10 @@ func startSyscallMonitor() {
 		return
 	}
 
+	syscallEventsMap = objs.SyscallEvents
 
 	// Attach tracepoints
-	traceAttach := func(tp string , prog *ebpf.Program) {
+	traceAttach := func(tp string, prog *ebpf.Program) {
 		lnk, err := link.Tracepoint("syscalls", tp, prog, nil)
 		if err != nil {
 			log.Printf("⚠️ Failed to attach tracepoint %s: %v", tp, err)
@@ -61,7 +62,6 @@ func startSyscallMonitor() {
 		}
 	}
 
-	// Tracepoint-style  
 	traceAttach("sys_enter_execve", objs.LogExecve)
 	traceAttach("sys_enter_openat", objs.LogOpen)
 	traceAttach("sys_enter_unlinkat", objs.LogUnlink)
@@ -71,9 +71,11 @@ func startSyscallMonitor() {
 	traceAttach("sys_enter_setuid", objs.LogSetuid)
 	traceAttach("sys_enter_socket", objs.LogSocket)
 	traceAttach("sys_enter_connect", objs.LogConnect)
+}
 
-	// Read syscall events
-	syscallReader, err = ringbuf.NewReader(objs.SyscallEvents)
+func StartSyscallReader(monitoredPIDs *map[uint32]bool) {
+	var err error
+	syscallReader, err = ringbuf.NewReader(syscallEventsMap)
 	if err != nil {
 		log.Printf("❌ Failed to open syscall ring buffer: %v", err)
 		return
@@ -92,17 +94,20 @@ func startSyscallMonitor() {
 				log.Printf("❌ Failed to decode syscall event: %v", err)
 				continue
 			}
-			if !monitoredPIDs[event.Pid]{
+			if !(*monitoredPIDs)[event.Pid] {
 				continue
 			}
-
-
-			logs.LogSyscall(event.Pid, event.Type, string(bytes.TrimRight(event.Comm[:], "\x00")), string(bytes.TrimRight(event.Filename[:], "\x00")))
+			logs.LogSyscall(
+				event.Pid,
+				event.Type,
+				string(bytes.TrimRight(event.Comm[:], "\x00")),
+				string(bytes.TrimRight(event.Filename[:], "\x00")),
+			)
 		}
 	}()
 }
 
-func stopSyscallMonitor() {
+func StopSyscallMonitor() {
 	if syscallReader != nil {
 		syscallReader.Close()
 	}

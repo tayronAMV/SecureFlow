@@ -1,8 +1,8 @@
-package metrics
+package internal
 
 import (
 	"agent/pkg/logs"
-	"agent/pkg/utils"
+	"agent/pkg/kube"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,7 +20,7 @@ func GetMemoryUsage(containerID string, pid int) (*logs.MemoryUsage, error) {
 	// preserve display ID
 	displayID := containerID
 	// resolve the actual cgroup v2 path for this PID
-	cgroupPath, err := utils.ResolvePathForPID(pid)
+	cgroupPath, err := ResolvePathForPID(pid)
 	if err != nil {
 		return nil, fmt.Errorf("memory: could not resolve cgroup for PID %d: %w", pid, err)
 	}
@@ -86,7 +86,7 @@ func GetMemoryUsage(containerID string, pid int) (*logs.MemoryUsage, error) {
 // GetCPUUsage reads CPU stats for a container by PID (cgroup v2 only)
 func GetCPUUsage(containerID string, pid int) (*logs.CPUUsage, error) {
 	displayID := containerID
-	cgroupPath, err := utils.ResolvePathForPID(pid)
+	cgroupPath, err := ResolvePathForPID(pid)
 	if err != nil {
 		return nil, fmt.Errorf("cpu: could not resolve cgroup for PID %d: %w", pid, err)
 	}
@@ -143,7 +143,7 @@ func GetCPUUsage(containerID string, pid int) (*logs.CPUUsage, error) {
 // GetDiskIOUsage reads disk I/O stats for a container by PID (cgroup v2 only)
 func GetDiskIOUsage(containerID string, pid int) (*logs.DiskIOUsage, error) {
 	displayID := containerID
-	cgroupPath, err := utils.ResolvePathForPID(pid)
+	cgroupPath, err := ResolvePathForPID(pid)
 	if err != nil {
 		return nil, fmt.Errorf("disk: could not resolve cgroup for PID %d: %w", pid, err)
 	}
@@ -178,4 +178,20 @@ func GetDiskIOUsage(containerID string, pid int) (*logs.DiskIOUsage, error) {
 		DiskUsageRate:  0,
 	}
 	return usage, nil
+}
+
+
+func StartResourceCollector(mappings []kube.ContainerMapping) {
+	for _, m := range mappings {
+		if mem, err := GetMemoryUsage(m.ContainerID, m.PID); err == nil {
+			logs.LogMemory(mem)
+		}
+		if cpu, err := GetCPUUsage(m.ContainerID, m.PID); err == nil {
+			logs.LogCPU(cpu)
+		}
+		if disk, err := GetDiskIOUsage(m.ContainerID, m.PID); err == nil {
+			logs.LogDisk(disk)
+		}
+	}
+	
 }
