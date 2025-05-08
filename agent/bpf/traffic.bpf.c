@@ -186,13 +186,13 @@ static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction)
 }
 
 SEC("cgroup_skb/ingress")
-int ingress_prog(struct __sk_buff *ctx)
+int monitor_ingress(struct __sk_buff *ctx)
 {
     return parse_packet(ctx, 1);
 }
 
 SEC("cgroup_skb/egress")
-int egress_prog(struct __sk_buff *ctx)
+int monitor_egress(struct __sk_buff *ctx)
 {
     return parse_packet(ctx, 0);
 }

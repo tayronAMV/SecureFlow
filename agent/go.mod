@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/cilium/ebpf v0.18.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.3
 )

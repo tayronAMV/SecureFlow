@@ -40,3 +40,12 @@ type TrafficInfo struct {
 	_        [3]byte // padding because correct reading from c struct ( trrafic.h) 
 	PktLen   uint64
 }
+
+type Anomaly_log struct {
+	CPU     float64 `json:"cpu"`
+	DiskIO  float64 `json:"disk_io"`
+	Memory  float64 `json:"memory"`
+	Network float64 `json:"network"`
+	Syscall float64 `json:"syscall"`
+}
+
