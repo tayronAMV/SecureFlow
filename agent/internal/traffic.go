@@ -8,6 +8,7 @@ import (
 	"agent/pkg/kube"
 	"encoding/binary"
 	"agent/pkg/logs"
+	"agent/pkg/utils"
 )
 
 var (
@@ -75,6 +76,14 @@ func StartTrraficCollector() {
 			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
 				log.Printf("❌ Failed to decode event: %v", err)
 				continue
+			}
+			UID := kube.PidToUid(int(event.Pid))
+
+			//calculate Network usage for this container , for Anomaly_log
+			if log, ok := utils.Container_uid_map[UID]; ok {
+				log.Network += float64(event.PayloadLen)
+			}else{
+				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
 			}
 			
 		}

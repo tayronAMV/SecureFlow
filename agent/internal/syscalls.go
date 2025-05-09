@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"log"
 
+	"agent/pkg/kube"
 	"agent/pkg/logs"
+	"agent/pkg/utils"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -73,7 +75,7 @@ func InitSyscallMonitor() {
 	traceAttach("sys_enter_connect", objs.LogConnect)
 }
 
-func StartSyscallReader(monitoredPIDs *map[uint32]bool) {
+func StartSyscallReader() {
 	var err error
 	syscallReader, err = ringbuf.NewReader(syscallEventsMap)
 	if err != nil {
@@ -94,15 +96,20 @@ func StartSyscallReader(monitoredPIDs *map[uint32]bool) {
 				log.Printf("❌ Failed to decode syscall event: %v", err)
 				continue
 			}
-			if !(*monitoredPIDs)[event.Pid] {
+			if _, ok := kube.Pid_toContainer_Map[int(event.Pid)]; !ok{
 				continue
 			}
-			logs.LogSyscall(
-				event.Pid,
-				event.Type,
-				string(bytes.TrimRight(event.Comm[:], "\x00")),
-				string(bytes.TrimRight(event.Filename[:], "\x00")),
-			)
+			//insert syscall count into Anomaly_Log calculation
+			UID := kube.PidToUid(int(event.Pid))
+			if obj , ok := utils.Container_uid_map[UID] ; ok {
+				obj.Syscall +=1
+			}else{
+				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
+			}
+
+
+			// insted i neeed a push the DB instacne 
+		
 		}
 	}()
 }

@@ -1,14 +1,15 @@
 package main
 
 import (
+	"agent/internal"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"agent/internal"
-	"agent/pkg/logs"
-	"agent/pkg/kube"
 
+	"agent/pkg/kube"
+	"agent/pkg/utils"
+	"time"
 )
 
 func agent_Start(){
@@ -21,13 +22,23 @@ func agent_Start(){
 			log.Printf("❌ Failed to fetch container mappings: %v", err)
 			return
 		}
-
 		internal.Attach_bpf_network(mappings)
 
+		// need to make this councurrent
 
 		internal.StartSyscallReader()
 		internal.StartTrraficCollector()
 		internal.StartResourceCollector(mappings)
+
+		time.Sleep(10 * time.Second)
+		utils.Send_to_Server_Reset()
+
+		
+
+
+
+
+
 	}
 }
 
@@ -39,9 +50,7 @@ func agent_stop(){
 
 func main() {
 	log.Println("🚀 Starting SecureFlow agent...")
-
-
-	
+	agent_Start()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

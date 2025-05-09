@@ -36,7 +36,7 @@ struct flow_event_t {
         } icmp;
     };
 
-    __u32 pid ; 
+    __u32 Pid ; 
 };
 
 #endif // __TRAFFIC_H__

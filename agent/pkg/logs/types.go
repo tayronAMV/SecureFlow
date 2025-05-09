@@ -55,7 +55,7 @@ type FlowEvent struct {
 
 	// Padding to ensure struct size alignment (total size = 8 + 4 + 4 + 2 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 8 + 64 + 64 + 2 + 1 = 157 bytes)
 	_ [3]byte // padding to make it multiple of 8 (optional depending on kernel + Go alignment)
-	pid 	uint32
+	Pid 	uint32
 }
 
 type Anomaly_log struct {
@@ -66,3 +66,19 @@ type Anomaly_log struct {
 	Syscall float64 `json:"syscall"`
 }
 
+type CpuTracker struct {
+	PrevTime   time.Time
+	PrevCPUTime int64
+}
+
+type MemoryTracker struct {
+	PrevTime      time.Time
+	PrevUsedBytes int64
+}
+
+
+type DiskTracker struct {
+	PrevTime       time.Time
+	PrevReadBytes  int64
+	PrevWriteBytes int64
+}

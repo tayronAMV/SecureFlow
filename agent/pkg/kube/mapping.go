@@ -24,7 +24,7 @@ type ContainerMapping struct {
 	UID 		  string	
 }
 
-var pid_toContainer_Map = make(map[int]ContainerMapping)
+var Pid_toContainer_Map = make(map[int]ContainerMapping)
 
 // FetchContainerMappings connects to the Kubernetes API and maps container IDs to PIDs
 func FetchContainerMappings() ([]ContainerMapping, error) {
@@ -100,5 +100,5 @@ func getPidFromDocker(containerID string) (int, error) {
 }
 
 func PidToUid(pid int) string {
-	return pid_toContainer_Map[pid].UID 
+	return Pid_toContainer_Map[pid].UID 
 }

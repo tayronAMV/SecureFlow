@@ -1,14 +1,16 @@
 package internal
 
 import (
-	"agent/pkg/logs"
 	"agent/pkg/kube"
+	"agent/pkg/logs"
+	"agent/pkg/utils"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
 )
 
 // -----------------------------
@@ -182,16 +184,102 @@ func GetDiskIOUsage(containerID string, pid int) (*logs.DiskIOUsage, error) {
 
 
 func StartResourceCollector(mappings []kube.ContainerMapping) {
-	for _, m := range mappings {
-		if mem, err := GetMemoryUsage(m.ContainerID, m.PID); err == nil {
-			logs.LogMemory(mem)
+	go func() {
+		fmt.Println("📊 Starting resource collector (CPU, Memory, Disk)...")
+		for {
+			for _, m := range mappings {
+				// Each function updates the global anomaly map
+				if err := CollectAndUpdateCPU(m.ContainerID, m.PID); err != nil {
+					fmt.Printf("⚠️ CPU update failed for %s: %v", m.ContainerID, err)
+				}
+				if err := CollectAndUpdateMemory(m.ContainerID, m.PID); err != nil {
+					fmt.Printf("⚠️ Memory update failed for %s: %v", m.ContainerID, err)
+				}
+				if err := CollectAndUpdateDisk(m.ContainerID, m.PID); err != nil {
+					fmt.Printf("⚠️ Disk update failed for %s: %v", m.ContainerID, err)
+				}
+			}
+
+			// You can log or send the final anomaly log map if needed here
+			// e.g., log.Println(utils.Container_uid_map)
+
+			time.Sleep(1 * time.Second) // wait before the next interval
 		}
-		if cpu, err := GetCPUUsage(m.ContainerID, m.PID); err == nil {
-			logs.LogCPU(cpu)
-		}
-		if disk, err := GetDiskIOUsage(m.ContainerID, m.PID); err == nil {
-			logs.LogDisk(disk)
+	}()
+}
+
+func CollectAndUpdateCPU(containerID string, pid int) error{
+	cur, err := GetCPUUsage(containerID, pid)
+	if err != nil {
+		fmt.Printf("❌ CPU collect error for %s: %v", containerID, err)
+		return err
+	}
+	UID := kube.PidToUid(pid)
+
+	if prev, ok := utils.CpuTrackers[UID]; ok {
+		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
+		if deltaTime > 0 {
+			deltaCPU := float64(cur.CPUTime - prev.PrevCPUTime)
+			utils.Container_uid_map[UID].CPU = deltaCPU / deltaTime
 		}
 	}
+
+	utils.CpuTrackers[UID] = logs.CpuTracker{
+		PrevTime:    cur.Timestamp,
+		PrevCPUTime: cur.CPUTime,
+	}
+
 	
+	return nil
+}
+
+func CollectAndUpdateDisk(containerID string, pid int) error {
+	cur, err := GetDiskIOUsage(containerID, pid)
+	if err != nil {
+		fmt.Printf("❌ Disk I/O collect error for %s: %v\n", containerID, err)
+		return err
+	}
+	UID := kube.PidToUid(pid)
+
+	if prev, ok := utils.DiskTrackers[UID]; ok {
+		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
+		if deltaTime > 0 {
+			deltaRead := cur.DiskReadBytes - prev.PrevReadBytes
+			deltaWrite := cur.DiskWriteBytes - prev.PrevWriteBytes
+			utils.Container_uid_map[UID].DiskIO = float64(deltaRead+deltaWrite) / deltaTime
+		}
+	}
+
+	utils.DiskTrackers[UID] = logs.DiskTracker{
+		PrevTime:       cur.Timestamp,
+		PrevReadBytes:  cur.DiskReadBytes,
+		PrevWriteBytes: cur.DiskWriteBytes,
+	}
+
+	return nil
+}
+
+
+func CollectAndUpdateMemory(containerID string, pid int) error {
+	cur, err := GetMemoryUsage(containerID, pid)
+	if err != nil {
+		fmt.Printf("❌ Memory collect error for %s: %v\n", containerID, err)
+		return err
+	}
+	UID := kube.PidToUid(pid)
+
+	if prev, ok := utils.MemoryTrackers[UID]; ok {
+		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
+		if deltaTime > 0 {
+			deltaMem := float64(cur.UsedMemory - prev.PrevUsedBytes)
+			utils.Container_uid_map[UID].Memory = deltaMem / deltaTime
+		}
+	}
+
+	utils.MemoryTrackers[UID] = logs.MemoryTracker{
+		PrevTime:      cur.Timestamp,
+		PrevUsedBytes: cur.UsedMemory,
+	}
+
+	return nil
 }

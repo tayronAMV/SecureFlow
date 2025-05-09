@@ -125,7 +125,7 @@ static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction)
     evt->timestamp   = bpf_ktime_get_ns();
     evt->payload_len = ctx->len;
     evt->direction   = direction;
-    evt->pid = bpf_get_current_pid_tgid() >> 32;
+    evt->Pid = bpf_get_current_pid_tgid() >> 32;
 
     struct ethhdr *eth = data;
     if (check_bounds(eth, data_end, sizeof(*eth)))
