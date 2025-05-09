@@ -200,8 +200,7 @@ func StartResourceCollector(mappings []kube.ContainerMapping) {
 				}
 			}
 
-			// You can log or send the final anomaly log map if needed here
-			// e.g., log.Println(utils.Container_uid_map)
+
 
 			time.Sleep(1 * time.Second) // wait before the next interval
 		}
@@ -229,6 +228,9 @@ func CollectAndUpdateCPU(containerID string, pid int) error{
 		PrevCPUTime: cur.CPUTime,
 	}
 
+	// send to DB! 
+	logs.SaveCPUUsage(cur)
+
 	
 	return nil
 }
@@ -255,6 +257,8 @@ func CollectAndUpdateDisk(containerID string, pid int) error {
 		PrevReadBytes:  cur.DiskReadBytes,
 		PrevWriteBytes: cur.DiskWriteBytes,
 	}
+	// send to DB! 
+	logs.SaveDiskIOUsage(cur)
 
 	return nil
 }
@@ -280,6 +284,8 @@ func CollectAndUpdateMemory(containerID string, pid int) error {
 		PrevTime:      cur.Timestamp,
 		PrevUsedBytes: cur.UsedMemory,
 	}
+
+	logs.SaveMemoryUsage(cur)
 
 	return nil
 }
