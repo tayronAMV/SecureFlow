@@ -17,12 +17,6 @@ import (
 var syscallReader *ringbuf.Reader
 var syscallLinks []link.Link
 
-type syscallEvent struct {
-	Pid      uint32
-	Type     uint32
-	Comm     [16]byte
-	Filename [256]byte
-}
 
 var syscallEventsMap *ebpf.Map
 
@@ -91,7 +85,7 @@ func StartSyscallReader() {
 				log.Printf("⚠️ Syscall ringbuf error: %v", err)
 				break
 			}
-			var event syscallEvent
+			var event logs.SyscallEvent
 			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
 				log.Printf("❌ Failed to decode syscall event: %v", err)
 				continue
@@ -109,8 +103,8 @@ func StartSyscallReader() {
 
 
 			// insted i neeed a push the DB instacne 
-		
-		}
+			logs.SaveSyscall(&event)
+		}	
 	}()
 }
 

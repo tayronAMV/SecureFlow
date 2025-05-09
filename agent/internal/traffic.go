@@ -85,6 +85,10 @@ func StartTrraficCollector() {
 			}else{
 				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
 			}
+
+			//send to the fucking DB 
+			logs.SaveFlowEvent(&event)
+
 			
 		}
 	}()

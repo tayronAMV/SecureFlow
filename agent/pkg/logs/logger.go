@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-
+	"context"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"time"
 )
 
 var (
@@ -16,7 +19,7 @@ var (
 
 
 
-
+// wtf is this ? 
 func decodeSyscallType(t uint32) string {
 	switch t {
 	case 1:
@@ -107,3 +110,69 @@ func RabbitMQ_producer_Close() {
 }
 
 
+var MongoClient *mongo.Client
+
+var (
+	SyscallCollection *mongo.Collection
+	CPUCollection      *mongo.Collection
+	MemoryCollection   *mongo.Collection
+	DiskCollection     *mongo.Collection
+	TrafficCollection  *mongo.Collection
+)
+
+func InitMongo() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to MongoDB: %v", err)
+	}
+
+	MongoClient = client
+	db := client.Database("secureflow")
+
+	SyscallCollection = db.Collection("syscalls")
+	CPUCollection = db.Collection("cpu")
+	MemoryCollection = db.Collection("memory")
+	DiskCollection = db.Collection("disk_io")
+	TrafficCollection = db.Collection("traffic")
+
+	log.Println("✅ Connected to MongoDB and initialized collections")
+}
+
+func SaveCPUUsage(data *CPUUsage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := CPUCollection.InsertOne(ctx, data)
+	return err
+}
+
+func SaveMemoryUsage(data *MemoryUsage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := MemoryCollection.InsertOne(ctx, data)
+	return err
+}
+
+func SaveDiskIOUsage(data *DiskIOUsage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := DiskCollection.InsertOne(ctx, data)
+	return err
+}
+
+func SaveFlowEvent(evt *FlowEvent) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := TrafficCollection.InsertOne(ctx, evt)
+	return err
+}
+
+func SaveSyscall(evt *SyscallEvent) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := SyscallCollection.InsertOne(ctx, evt)
+	return err
+}
