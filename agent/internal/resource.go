@@ -215,6 +215,10 @@ func CollectAndUpdateCPU(containerID string, pid int) error{
 	}
 	UID := kube.PidToUid(pid)
 
+	if _,ok := utils.Container_uid_map[UID]; !ok{
+		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
+	}
+
 	if prev, ok := utils.CpuTrackers[UID]; ok {
 		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
 		if deltaTime > 0 {
@@ -227,7 +231,7 @@ func CollectAndUpdateCPU(containerID string, pid int) error{
 		PrevTime:    cur.Timestamp,
 		PrevCPUTime: cur.CPUTime,
 	}
-
+	cur.UID = UID 
 	// send to DB! 
 	logs.Producer(logs.Producer_msg{
 		Body: *cur,
@@ -246,6 +250,9 @@ func CollectAndUpdateDisk(containerID string, pid int) error {
 		return err
 	}
 	UID := kube.PidToUid(pid)
+	if _,ok := utils.Container_uid_map[UID]; !ok{
+		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
+	}
 
 	if prev, ok := utils.DiskTrackers[UID]; ok {
 		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
@@ -261,6 +268,7 @@ func CollectAndUpdateDisk(containerID string, pid int) error {
 		PrevReadBytes:  cur.DiskReadBytes,
 		PrevWriteBytes: cur.DiskWriteBytes,
 	}
+	cur.UID = UID 
 	// send to server
 	logs.Producer(logs.Producer_msg{
 		Body: *cur,
@@ -278,7 +286,9 @@ func CollectAndUpdateMemory(containerID string, pid int) error {
 		return err
 	}
 	UID := kube.PidToUid(pid)
-
+	if _,ok := utils.Container_uid_map[UID]; !ok{
+		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
+	}
 	if prev, ok := utils.MemoryTrackers[UID]; ok {
 		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
 		if deltaTime > 0 {
@@ -291,6 +301,7 @@ func CollectAndUpdateMemory(containerID string, pid int) error {
 		PrevTime:      cur.Timestamp,
 		PrevUsedBytes: cur.UsedMemory,
 	}
+	cur.UID = UID 
 
 	logs.Producer(logs.Producer_msg{
 		Body: *cur,

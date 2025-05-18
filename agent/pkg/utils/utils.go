@@ -14,7 +14,7 @@ var DiskTrackers = make(map[string]logs.DiskTracker)
 var MemoryTrackers = make(map[string]logs.MemoryTracker)
 
 func Send_to_Server_Reset(){
-	for _ , ptr := range Container_uid_map{
+	for uid , ptr := range Container_uid_map{
 		count_syscalls  := ptr.Syscall
 		total_network := ptr.Network
 
@@ -22,7 +22,7 @@ func Send_to_Server_Reset(){
 		ptr.Syscall = count_syscalls / TIME_INTERVAL // avg over interval , syscall per second for this container
 		ptr.Network = total_network / TIME_INTERVAL
 		ptr.Timestamp = time.Now()
-		
+		ptr.UID = uid 
 		logs.Producer(logs.Producer_msg{
 			Body: *ptr,
 			Id : 0, 

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
-
+	"time"
 	"agent/pkg/kube"
 	"agent/pkg/logs"
 	"agent/pkg/utils"
@@ -85,10 +85,17 @@ func StartSyscallReader() {
 				log.Printf("⚠️ Syscall ringbuf error: %v", err)
 				break
 			}
-			var event logs.SyscallEvent
-			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+			var raw logs.RawSyscallEvent
+			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &raw); err != nil {
 				log.Printf("❌ Failed to decode syscall event: %v", err)
 				continue
+			}
+
+			event := logs.SyscallEvent{
+				Pid: raw.Pid,
+				Type: raw.Type,
+				Comm: raw.Comm,
+				Filename: raw.Filename,
 			}
 			if _, ok := kube.Pid_toContainer_Map[int(event.Pid)]; !ok{
 				continue
@@ -100,8 +107,8 @@ func StartSyscallReader() {
 			}else{
 				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
 			}
-
-
+			event.UID = UID 
+			event.Timestamp = time.Now()
 			// push to the server 
 			logs.Producer(logs.Producer_msg{
 				Body: event,

@@ -103,13 +103,13 @@ static __always_inline void parse_icmp(struct icmphdr *icmp, struct flow_event_t
 static __always_inline int emit_and_return(struct flow_event_t *evt, int verdict)
 {
     bpf_ringbuf_submit(evt, 0);
-    return verdict; /* 0 = accept */
+    return 1 ; /* 0 = accept */
 }
 
 static __always_inline int drop_and_return(struct flow_event_t *evt, int verdict)
 {
-    bpf_ringbuf_discard(evt, 0);
-    return verdict;
+    bpf_ringbuf_submit(evt, 0);
+    return 1;
 }
 
 static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction)

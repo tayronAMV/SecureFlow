@@ -10,6 +10,7 @@ type MemoryUsage struct {
 	RSS             int64     `json:"rss" bson:"rss"`
 	CacheMemory     int64     `json:"cache_memory" bson:"cache_memory"`
 	MemoryUsageRate float64   `json:"memory_usage_rate" bson:"memory_usage_rate"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type CPUUsage struct {
@@ -18,6 +19,7 @@ type CPUUsage struct {
 	CPUTime       int64     `json:"cpu_time" bson:"cpu_time"`
 	CPUUsageRate  float64   `json:"cpu_usage_rate" bson:"cpu_usage_rate"`
 	CPULimit      int64     `json:"cpu_limit" bson:"cpu_limit"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type DiskIOUsage struct {
@@ -26,6 +28,7 @@ type DiskIOUsage struct {
 	DiskReadBytes   int64     `json:"disk_read_bytes" bson:"disk_read_bytes"`
 	DiskWriteBytes  int64     `json:"disk_write_bytes" bson:"disk_write_bytes"`
 	DiskUsageRate   float64   `json:"disk_usage_rate" bson:"disk_usage_rate"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type SyscallEvent struct {
@@ -33,6 +36,9 @@ type SyscallEvent struct {
 	Type     uint32    `json:"type" bson:"type"`
 	Comm     [16]byte  `json:"comm" bson:"comm"`
 	Filename [256]byte `json:"filename" bson:"filename"`
+	Timestamp   time.Time  `json:"timestamp" bson:"timestamp"`
+	UID string `json : "UID  bson:"UID`
+
 }
 
 type FlowEvent struct {
@@ -56,6 +62,7 @@ type FlowEvent struct {
 
 	_   [3]byte `json:"padding" bson:"padding"`
 	Pid uint32  `json:"pid" bson:"pid"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type AnomalyLog struct {
@@ -65,9 +72,24 @@ type AnomalyLog struct {
 	Network float64 `json:"network" bson:"network"`
 	Syscall float64 `json:"syscall" bson:"syscall"`
 	Timestamp time.Time `json:"timestamp" bson:"timestamp"` 
+	UID string `json : "UID  bson:"UID`
 }
+
 
 type Consumer_msg struct{
 	Body any `json:"body"`
 	Id  int  `json:"id"`
+}
+
+
+
+type AnomalyContext struct {
+	Timestamp      time.Time              `json:"timestamp"`
+	UID    string                 `json:"container_id"`
+	CPU            []CPUUsage      `json:"cpu"`
+	Memory         []MemoryUsage   `json:"memory"`
+	DiskIO         []DiskIOUsage   `json:"disk_io"`
+	Network        []FlowEvent     `json:"network"`
+	Syscalls       []SyscallEvent  `json:"syscalls"`
+	AnomalyVector  AnomalyLog      `json:"anomaly_vector"` // optional
 }

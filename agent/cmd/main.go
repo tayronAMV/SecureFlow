@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
+	"agent/pkg/logs"
 	"agent/pkg/kube"
 	"agent/pkg/utils"
 	"time"
@@ -15,6 +15,7 @@ import (
 func agent_Start(){
 	internal.Traffic_INIT()
 	internal.InitSyscallMonitor()
+	logs.RabbitMQ_producer_Start()
 	
 	for {
 		mappings, err := kube.FetchContainerMappings()
@@ -30,7 +31,7 @@ func agent_Start(){
 		internal.StartTrraficCollector()
 		internal.StartResourceCollector(mappings)
 
-		time.Sleep(10 * time.Second)
+		time.Sleep(120 * time.Second)
 		utils.Send_to_Server_Reset()
 
 		
@@ -46,6 +47,7 @@ func agent_Start(){
 func agent_stop(){
 	internal.StopSyscallMonitor()
 	internal.Traffic_close()
+	logs.RabbitMQ_producer_Close()
 }
 
 func main() {

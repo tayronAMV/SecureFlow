@@ -11,6 +11,7 @@ type MemoryUsage struct {
 	RSS             int64     `json:"rss" bson:"rss"`
 	CacheMemory     int64     `json:"cache_memory" bson:"cache_memory"`
 	MemoryUsageRate float64   `json:"memory_usage_rate" bson:"memory_usage_rate"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type CPUUsage struct {
@@ -19,6 +20,7 @@ type CPUUsage struct {
 	CPUTime       int64     `json:"cpu_time" bson:"cpu_time"`
 	CPUUsageRate  float64   `json:"cpu_usage_rate" bson:"cpu_usage_rate"`
 	CPULimit      int64     `json:"cpu_limit" bson:"cpu_limit"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type DiskIOUsage struct {
@@ -27,6 +29,7 @@ type DiskIOUsage struct {
 	DiskReadBytes   int64     `json:"disk_read_bytes" bson:"disk_read_bytes"`
 	DiskWriteBytes  int64     `json:"disk_write_bytes" bson:"disk_write_bytes"`
 	DiskUsageRate   float64   `json:"disk_usage_rate" bson:"disk_usage_rate"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type SyscallEvent struct {
@@ -34,6 +37,9 @@ type SyscallEvent struct {
 	Type     uint32    `json:"type" bson:"type"`
 	Comm     [16]byte  `json:"comm" bson:"comm"`
 	Filename [256]byte `json:"filename" bson:"filename"`
+	Timestamp   time.Time  `json:"timestamp" bson:"timestamp"`
+	UID string `json : "UID  bson:"UID`
+
 }
 
 type FlowEvent struct {
@@ -57,6 +63,7 @@ type FlowEvent struct {
 
 	_   [3]byte `json:"padding" bson:"padding"`
 	Pid uint32  `json:"pid" bson:"pid"`
+	UID string `json : "UID  bson:"UID`
 }
 
 type Anomaly_log struct {
@@ -66,6 +73,7 @@ type Anomaly_log struct {
 	Network float64 `json:"network" bson:"network"`
 	Syscall float64 `json:"syscall" bson:"syscall"`
 	Timestamp time.Time `json:"timestamp" bson:"timestamp"` 
+	UID string `json : "UID  bson:"UID`
 }
 
 
@@ -97,3 +105,34 @@ type Producer_msg struct{
 	Id  int  `json:"id"`
 }
 
+
+
+type RawSyscallEvent struct {
+	Pid      uint32
+	Type     uint32
+	Comm     [16]byte
+	Filename [256]byte
+}
+
+
+
+type RawFlowEvent struct {
+	Timestamp     uint64
+	SrcIP         uint32
+	DstIP         uint32
+	SrcPort       uint16
+	DstPort       uint16
+	Protocol      uint8
+	Direction     uint8
+	PayloadLen    uint16
+	DPIProtocol   uint8
+	Reserved1     uint8
+	Reserved2     uint16
+
+	// union: largest variant is HTTP (72 bytes)
+	HTTPMethod [8]byte
+	HTTPPath   [64]byte
+	_          [72 - 8 - 64]byte // padding to match union size if needed
+
+	Pid uint32
+}

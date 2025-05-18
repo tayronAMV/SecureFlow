@@ -1,14 +1,16 @@
 package internal
 
 import (
-	"github.com/cilium/ebpf"
-	"log"
-	"bytes"
-	"github.com/cilium/ebpf/ringbuf"
 	"agent/pkg/kube"
-	"encoding/binary"
 	"agent/pkg/logs"
-	"agent/pkg/utils"
+	// "agent/pkg/utils"
+	"bytes"
+	"encoding/binary"
+	
+	"log"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/ringbuf"
 )
 
 var (
@@ -72,20 +74,41 @@ func StartTrraficCollector() {
 				break
 			}
 
-			var event logs.FlowEvent
-			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+			var raw logs.RawFlowEvent
+			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &raw); err != nil {
 				log.Printf("❌ Failed to decode event: %v", err)
 				continue
 			}
-			UID := kube.PidToUid(int(event.Pid))
+			event := logs.FlowEvent{
+				Timestamp:     raw.Timestamp,
+				SrcIP:         raw.SrcIP,
+				DstIP:         raw.DstIP,
+				SrcPort:       raw.SrcPort,
+				DstPort:       raw.DstPort,
+				Protocol:      raw.Protocol,
+				Direction:     raw.Direction,
+				PayloadLen:    raw.PayloadLen,
+				DPIProtocol:   raw.DPIProtocol,
+				Reserved1:     raw.Reserved1,
+				Reserved2:     raw.Reserved2,
+				HTTPMethod:    raw.HTTPMethod,
+				HTTPPath:      raw.HTTPPath,
+				// DNSQueryName:  raw.DNSQueryName,
+				// DNSQueryType:  raw.DNSQueryType,
+				// ICMPType:      raw.ICMPType,
+				Pid:           raw.Pid,
+		}
 
-			//calculate Network usage for this container , for Anomaly_log
-			if log, ok := utils.Container_uid_map[UID]; ok {
-				log.Network += float64(event.PayloadLen)
-			}else{
-				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
-			}
+			log.Println("this is packet = "  , event)
+			// UID := kube.PidToUid(int(event.Pid))
 
+			// //calculate Network usage for this container , for Anomaly_log
+			// if log, ok := utils.Container_uid_map[UID]; ok {
+			// 	log.Network += float64(event.PayloadLen)
+			// }else{
+			// 	utils.Container_uid_map[UID] = &logs.Anomaly_log{}
+			// }
+			// event.UID = UID 
 			//send to the server 
 			logs.Producer(logs.Producer_msg{
 				Body: event,

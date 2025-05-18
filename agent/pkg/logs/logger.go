@@ -72,6 +72,10 @@ func RabbitMQ_producer_Start() {
 }
 
 func Producer(evt Producer_msg) {
+	if evt.Id == 4 { 
+		fmt.Println(evt.Body)
+	}
+
 	body, err := json.Marshal(evt)
 	if err != nil {
 		log.Printf("❌ JSON marshal failed: %v", err)
@@ -91,7 +95,6 @@ func Producer(evt Producer_msg) {
 		return
 	}
 
-	log.Println("📤 Sent anomaly log to queue")
 }
 
 
