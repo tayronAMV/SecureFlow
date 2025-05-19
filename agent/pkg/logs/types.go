@@ -43,9 +43,9 @@ type SyscallEvent struct {
 }
 
 type FlowEvent struct {
-	Timestamp   uint64   `json:"timestamp" bson:"timestamp"`
-	SrcIP       uint32   `json:"src_ip" bson:"src_ip"`
-	DstIP       uint32   `json:"dst_ip" bson:"dst_ip"`
+	Timestamp   time.Time  `json:"timestamp" bson:"timestamp"`
+	SrcIP       string   `json:"src_ip" bson:"src_ip"`
+	DstIP       string   `json:"dst_ip" bson:"dst_ip"`
 	SrcPort     uint16   `json:"src_port" bson:"src_port"`
 	DstPort     uint16   `json:"dst_port" bson:"dst_port"`
 	Protocol    uint8    `json:"protocol" bson:"protocol"`
@@ -129,10 +129,12 @@ type RawFlowEvent struct {
 	Reserved1     uint8
 	Reserved2     uint16
 
-	// union: largest variant is HTTP (72 bytes)
-	HTTPMethod [8]byte
-	HTTPPath   [64]byte
-	_          [72 - 8 - 64]byte // padding to match union size if needed
-
-	Pid uint32
+	HTTPMethod    [8]byte
+	HTTPPath      [64]byte
+	DNSQueryName  [64]byte
+	DNSQueryType  uint16
+	ICMPType      uint8
+	_             [1]byte    // padding for 4-byte alignment
+	Pid           uint32
 }
+

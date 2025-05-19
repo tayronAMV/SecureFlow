@@ -23,7 +23,7 @@ func New() *CgroupWatcher {
 func (cw *CgroupWatcher) AttachIfNeeded(path string, prog *ebpf.Program, attachType ebpf.AttachType) {
 	cw.mu.Lock()
 	defer cw.mu.Unlock()
-
+	
 	key := path + fmt.Sprintf(":%d", attachType)
 	if _, exists := cw.attached[key]; exists {
 		return

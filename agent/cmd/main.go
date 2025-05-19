@@ -14,9 +14,9 @@ import (
 
 func agent_Start(){
 	internal.Traffic_INIT()
-	internal.InitSyscallMonitor()
+	// internal.InitSyscallMonitor()
 	logs.RabbitMQ_producer_Start()
-	
+	internal.StartTrraficCollector()
 	for {
 		mappings, err := kube.FetchContainerMappings()
 		if err != nil {
@@ -27,9 +27,9 @@ func agent_Start(){
 
 		// need to make this councurrent
 
-		internal.StartSyscallReader()
-		internal.StartTrraficCollector()
-		internal.StartResourceCollector(mappings)
+		// internal.StartSyscallReader()
+	
+		// internal.StartResourceCollector(mappings)
 
 		time.Sleep(120 * time.Second)
 		utils.Send_to_Server_Reset()

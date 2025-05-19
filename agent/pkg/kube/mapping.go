@@ -49,9 +49,9 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 	var results []ContainerMapping
 	log.Printf("📦 Found %d pods, iterating...",len(pods.Items))
 	for _, pod := range pods.Items {
-		if pod.Namespace == "kube-system" || pod.Namespace == "kube-public" || pod.Namespace == "kube-node-lease" {
-			continue
-		}
+		// if pod.Namespace == "kube-system" || pod.Namespace == "kube-public" || pod.Namespace == "kube-node-lease" {
+		// 	continue
+		// }
 		for _, status := range pod.Status.ContainerStatuses {
 			cid := strings.TrimPrefix(status.ContainerID, "containerd://")
 			if cid == "" {
