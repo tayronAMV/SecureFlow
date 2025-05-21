@@ -2,7 +2,7 @@ package kube
 
 import (
 	"context"
-	"strconv"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -24,12 +24,12 @@ type ContainerMapping struct {
 	UID 		  string	
 }
 
-var Pid_toContainer_Map = make(map[int]ContainerMapping)
+var Pid_toContainer_Map = make(map[int]ContainerMapping) // TODO , need to pass it to the main server  , container id and the namespace for every log 
 
 // FetchContainerMappings connects to the Kubernetes API and maps container IDs to PIDs
 func FetchContainerMappings() ([]ContainerMapping, error) {
 	
-	config, err := clientcmd.BuildConfigFromFlags("", "/etc/kubernetes/admin.conf")
+	config, err := clientcmd.BuildConfigFromFlags("", "/etc/rancher/k3s/k3s.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("❌ Cannot load kubeconfig: %w", err)
 	}
@@ -60,7 +60,7 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 			}	
 
 			log.Printf("🔍 Resolving PID for container %s (%s/%s)...", status.Name, pod.Namespace, pod.Name)
-			pid, err := getPidFromDocker(cid)
+			pid, err := getPidFromCrictl(cid)
 			if err != nil {
 				log.Printf("⚠️ Failed to get PID for container %s (%s): %v", cid, status.Name, err)
 				continue
@@ -83,22 +83,29 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 }
 
 // getPidFromDocker uses `docker inspect` to extract the PID of a container
-func getPidFromDocker(containerID string) (int, error) {
-	// Remove the "docker://" prefix if present
-	containerID = strings.TrimPrefix(containerID, "docker://")
+// getPidFromCrictl uses `crictl inspect` to extract the PID of a container
+func getPidFromCrictl(containerID string) (int, error) {
+	// Remove the "cri-o://" or "containerd://" prefix if present
+	containerID = strings.TrimPrefix(containerID, "cri-o://")
+	containerID = strings.TrimPrefix(containerID, "containerd://")
 
-	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Pid}}", containerID).Output()
+	out, err := exec.Command("crictl", "inspect", containerID).Output()
 	if err != nil {
-		return 0, fmt.Errorf("docker inspect failed: %w", err)
+		return 0, fmt.Errorf("crictl inspect failed: %w", err)
 	}
-	pidStr := strings.TrimSpace(string(out))
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid PID format: %w", err)
+
+	// Parse JSON and extract .info.pid
+	var result struct {
+		Info struct {
+			Pid int `json:"pid"`
+		} `json:"info"`
 	}
-	return pid, nil
+	if err := json.Unmarshal(out, &result); err != nil {
+		return 0, fmt.Errorf("failed to parse crictl inspect output: %w", err)
+	}
+
+	return result.Info.Pid, nil
 }
-
 func PidToUid(pid int) string {
 	return Pid_toContainer_Map[pid].UID 
 }

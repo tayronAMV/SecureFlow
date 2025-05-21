@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"server/internal/db/models"
-	"server/internal/db"
+	// "server/internal/db"
 	"github.com/streadway/amqp"
 )
 
@@ -66,11 +66,11 @@ func Connect_to_agent() error {
 				continue
 			}
 			log.Println("recived anomaly logs ")
-			err = db.InsertLog(logEvent.Body , logEvent.Id)
-			if err != nil{
-				log.Println("Anomaly log DB insertion error " , err)
-				continue 
-			}
+			// err = db.InsertLog(logEvent.Body , logEvent.Id)
+			// if err != nil{
+			// 	log.Println("Anomaly log DB insertion error " , err)
+			// 	continue 
+			// }
 
 		}
 	}()

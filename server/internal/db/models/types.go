@@ -93,3 +93,14 @@ type AnomalyContext struct {
 	Syscalls       []SyscallEvent  `json:"syscalls"`
 	AnomalyVector  AnomalyLog      `json:"anomaly_vector"` // optional
 }
+
+type LogItem struct {
+	Timestamp string // optional
+	Method    string
+	Path      string
+	Status    string
+	Operation string // e.g., read, write
+	Target    string // e.g., user, order
+	Type      string // e.g., api_call, static
+	Raw       string // original line for reference
+}

@@ -18,9 +18,9 @@ const (
 )
 
 type TreeNode struct {
-	val   float64
-	feature_of_threshold  int // 0=CPU, 1=DiskIO, 2=Memory, 3=Network , 4 = SysCall
-	threshold float64
+	Val   float64
+	Feature_of_threshold  int // 0=CPU, 1=DiskIO, 2=Memory, 3=Network , 4 = SysCall
+	Threshold float64
 	Left  *TreeNode
 	Right *TreeNode
 }
@@ -38,9 +38,9 @@ func max_int(a int , b int ) int {
 
 
 // step 1 : purpose - just to remove dups for the algo noty getting bloated with the same data
-func removeDuplicates(logs []models.AnomalyLog) []models.AnomalyLog {
+func removeDuplicates(logs []*models.AnomalyLog) []*models.AnomalyLog {
 	seen := make(map[string]bool)
-	result := []models.AnomalyLog{}
+	result := []*models.AnomalyLog{}
 
 	for _, log := range logs {
 		key := fmt.Sprintf("%.2f-%.2f-%.2f-%.2f-%.2f", log.CPU, log.Memory, log.DiskIO, log.Network, log.Syscall)
@@ -53,7 +53,7 @@ func removeDuplicates(logs []models.AnomalyLog) []models.AnomalyLog {
 }
 
 // step 1  
-func dataIsValid(logs []models.AnomalyLog) bool {
+func dataIsValid(logs []*models.AnomalyLog) bool {
 	streak := 0
 	invalid_count := 0 
 	for _, log := range logs {
@@ -64,6 +64,7 @@ func dataIsValid(logs []models.AnomalyLog) bool {
 		}else{
 			streak = 0 
 		}
+		if log.CPU == 0 || log.Memory == 0 || log.DiskIO == 0 || log.Network == 0 || log.Syscall == 0 { streak++; invalid_count++ }
 		if streak>= 5{
 			return false
 		}
@@ -72,7 +73,7 @@ func dataIsValid(logs []models.AnomalyLog) bool {
 }
 
 // step 1 , data cleaning 
-func Data_Cleaning(logs []models.AnomalyLog) ([]models.AnomalyLog , bool){
+func Data_Cleaning(logs []*models.AnomalyLog) ([]*models.AnomalyLog , bool){
 	logs = removeDuplicates(logs)
 	if !dataIsValid(logs){
 		return nil , false
@@ -169,8 +170,9 @@ func findFeatureMinMax(arr []*models.AnomalyLog, feature int) (float64, float64)
 }
 
 // step 4 , building one Itree 
-func buildTree(arr []*models.AnomalyLog, depth int) *TreeNode {
-	if len(arr) <= 1 || depth >= int(math.Log2(float64(len(arr)))) {
+func BuildTree(arr []*models.AnomalyLog, depth int) *TreeNode {
+	
+	if len(arr) <= 1 || depth >= 50 {
 		return nil
 	}
 
@@ -208,21 +210,20 @@ func buildTree(arr []*models.AnomalyLog, depth int) *TreeNode {
 	}
 
 	node := &TreeNode{
-		val:  threshold,
-		feature_of_threshold: feature,
-		threshold: threshold,
+		Val:  threshold,
+		Feature_of_threshold: feature,
+		Threshold: threshold,
 	}
-	node.Left = buildTree(left, depth+1)
-	node.Right = buildTree(right, depth+1)
+	node.Left = BuildTree(left, depth+1)
+	node.Right = BuildTree(right, depth+1)
 	return node
 }
 
 //step 4 , building forest of Itrees 
-func buildForest(arr []*models.AnomalyLog, numTrees int) []*TreeNode {
+func BuildForest(arr []*models.AnomalyLog, numTrees int) []*TreeNode {
 	forest := make([]*TreeNode, 0, numTrees)
 	for i := 0; i < numTrees; i++ {
-		sample := sampleSubset(arr, 100) // or any subsample size < len(arr)
-		tree := buildTree(sample, 0)
+		tree := BuildTree(arr, 0)
 		if tree != nil {
 			forest = append(forest, tree)
 		}
@@ -231,14 +232,6 @@ func buildForest(arr []*models.AnomalyLog, numTrees int) []*TreeNode {
 }
 
 
-//step 4 , take a sample of logs ( like 30 out of 100) and build trees from that for true randomness
-func sampleSubset(data []*models.AnomalyLog, size int) []*models.AnomalyLog {
-	sample := make([]*models.AnomalyLog, size)
-	for i := range size {
-		sample[i] = data[rand.Intn(len(data))] // sample with replacement
-	}
-	return sample
-}
 
 //step 5 , calc height of a one tree for one sample , h(x) for a specific anomaly log 
 // step 6 , also returns reason of isolation  , for fiding reason of anomaly  
@@ -249,61 +242,74 @@ func getTreeHeight(root *TreeNode ,log *models.AnomalyLog , depth int) (int , in
 
 	// if cur node is a leaf 
 	if root.Left == nil && root.Right == nil{
-		return depth , root.feature_of_threshold
+		return depth , root.Feature_of_threshold
 	}
 	
-	switch root.feature_of_threshold {
+	switch root.Feature_of_threshold {
 	case 0:
-		if root.threshold > log.CPU {
+		if root.Threshold > log.CPU {
 			return getTreeHeight(root.Left , log , depth+1 )
 		}
 		return getTreeHeight(root.Right , log , depth+1 )
 	case 1 :
-		if root.threshold > log.DiskIO {
+		if root.Threshold > log.DiskIO {
 			return getTreeHeight(root.Left , log , depth+1 )
 		}
 		return getTreeHeight(root.Right , log , depth+1 )
 	
 	case 2: 
-		if root.threshold > log.Memory {
+		if root.Threshold > log.Memory {
 			return getTreeHeight(root.Left , log , depth+1 )
 		}
 		return getTreeHeight(root.Right , log , depth+1 )
 
 	case 3: 
-		if root.threshold > log.Network {
+		if root.Threshold > log.Network {
 			return getTreeHeight(root.Left , log , depth+1 )
 		}
 		return getTreeHeight(root.Right , log , depth+1 )
 
 	case 4: 
-		if root.threshold > log.Syscall {
+		if root.Threshold > log.Syscall {
 			return getTreeHeight(root.Left , log , depth+1 )
 		}
 		return getTreeHeight(root.Right , log , depth+1 )
 	}
 
 
-	return depth, -1
+	panic("invalid feature index encountered in getTreeHeight")
 
 }
 
 
 // step 5 ,compute E(h(x)) , the avg height of the tree for every sample , avarge of h(x) for every sample ! 
-func compute_avg_height(iforest []*TreeNode , log *models.AnomalyLog) float64{
+func Compute_avg_height(iforest []*TreeNode, log *models.AnomalyLog) (float64, int) {
 	sum := 0.0
-	for i:= range iforest{
-		h , _ := getTreeHeight(iforest[i] , log , 1 )
+	m := make([]int,5)
+
+	for i := range iforest {
+		h, reason := getTreeHeight(iforest[i], log, 1)
 		sum += float64(h)
+		if reason >= 0 && reason < 5 {
+			m[reason]++
+		}
 	}
 
-	return sum/float64(len(iforest))
+	maxCount := 0
+	maxReason := -1
+	for i := 0; i < 5; i++ {
+		if m[i] > maxCount {
+			maxCount = m[i]
+			maxReason = i
+		}
+	}
+
+	return sum / float64(len(iforest)), maxReason
 }
 
 
-
-// step 5 , compute c(n) normaliztion factor for the E(h(x)) for score to be between 0 -1 
-func cFactor(n int) float64 {
+// step 5 , compute c(n) normaliztion factor for the E(h(x)) for score to be between 0 -1 // n is the number of samples
+func CFactor(n int) float64 {
 	if n <= 1 {
 		return 0
 	}
@@ -311,7 +317,7 @@ func cFactor(n int) float64 {
 }
 
 // step 5 , give anomaly score for each sample
-func compute_anomaly_score(cn float64 , avg_height float64) float64 {
+func Compute_anomaly_score(cn float64 , avg_height float64) float64 {
 	if cn == 0 {
 		return 1 
 	}
