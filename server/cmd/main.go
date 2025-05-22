@@ -2,51 +2,54 @@ package main
 
 import (
 	// "server/internal/db/models"
-	"server/internal/logic"
+	"time"
+	"server/internal/api/handlers"
 	"fmt"
+	"server/internal/logic"
+
 	
 )
 
 func main(){
-	logs , err := logic.LoadAnomalyLogsFromFile("/home/amitay2005/Documents/SecureFlow/server/internal/logic/random.txt")
-	if err != nil {
-		fmt.Println("oh no ! ", err)
-		return 
-	}
+	namespace := "default"
+	podname := "demo-test"
+	t := time.Now()
 
-	//step 1 check 
-
-	if logs , ok := logic.Data_Cleaning(logs) ; !ok{
-		fmt.Println("on god some shit is bad")
-	}else{
-		fmt.Println(logs)
-	}
+	containerName := "nginx"
 
 
-	forest := logic.BuildForest(logs ,50 )
+	kube_client , err:= handlers.GetKubernetesClient()
 
-	for _,log := range logs{
-		avg ,bad_feature := logic.Compute_avg_height(forest,log)
-		anomaly_score  := logic.Compute_anomaly_score(logic.CFactor(len(logs)),avg)
-		fmt.Println("this is one : " , log)
-		fmt.Println("this its anomaly score : ", anomaly_score)
-		fmt.Println("and the fucking reason is  ", bad_feature)
-
-
-
-	}
-
-
-
-}
-
-
-func Print_Tree(root *logic.TreeNode) {
-	if root == nil {
+	if err != nil{
+		fmt.Println("nooooo la policiaaaa nooooooo , " , err)
 		return
 	}
-	fmt.Printf("this is val %v , this is threshold %v , to feature %v ",root.Val , root.Threshold , root.Feature_of_threshold)
-	Print_Tree(root.Right)
-	Print_Tree(root.Left)
+
+	logs ,err := handlers.FetchPodLogs(kube_client , namespace , podname , containerName , t)
+
+	if err != nil{
+		fmt.Println(" oh no 2lv policia , " ,err)
+		return
+	}
+	
+
+	logs_arr := logic.CleanRawLogs(logs)
+	
+	struct_logs := logic.ParseLogs(logs_arr)
+
+	items := logic.BuildItemsets(struct_logs)
+
+	res := logic.RunApriori(items )
+
+	for _,arr := range res{
+		fmt.Println("ahhhhh " , arr)
+	}
+
+
+	
+	
+
 
 }
+	
+

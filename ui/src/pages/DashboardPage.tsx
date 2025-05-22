@@ -1,41 +1,46 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { dashboardStats, containers, scanResults, alerts, vulnerabilityTrend } from '@/lib/mockData';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { Shield, AlertTriangle, Bug, Server } from 'lucide-react';
 import StatusCard from '@/components/dashboard/StatusCard';
 import ContainerTable from '@/components/dashboard/ContainerTable';
-import ScanReportTable from '@/components/dashboard/ScanReportTable';
-import AlertsPreview from '@/components/dashboard/AlertsPreview';
-import { useWebSocket, ResourceMetric } from '@/hooks/useWebSocket';
+import { useWebSocketSubscription, LogMessage, useMessageHistory } from '@/contexts/WebSocketContext';
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('overview');
-  const [metrics, setMetrics] = useState<ResourceMetric[]>([]);
-  const [containerStats, setContainerStats] = useState(containers);
+  
+  // Use message history hook for channel 2 (scan reports)
+  const { messages: reportHistory } = useMessageHistory(2);
+  const [scanReports, setScanReports] = useState<string[]>([]);
+  
+  // Initialize scan reports from history when component mounts or history changes
+  useEffect(() => {
+    setScanReports(reportHistory);
+  }, [reportHistory]);
 
-  // Use wss:// for secure WebSocket connection
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+  const handleMessage = useCallback((msg: LogMessage) => {
+    // Channel filtering is done in the WebSocketContext
+    // Here we assume messages with ID 2 are for scan reports
+    setScanReports(prev => [...prev, msg.message]);
+  }, []);
 
-  useWebSocket(wsUrl, (message) => {
-    if (message.type === 'resource') {
-      // Keep last 100 metrics for charts
-      setMetrics(prev => [...prev.slice(-99), message.data]);
-      
-      // Update container stats
-      setContainerStats(prev => prev.map(container => {
-        if (container.id === message.data.containerId) {
-          return {
-            ...container,
-            cpu: message.data.cpu,
-            memory: message.data.memory,
-          };
-        }
-        return container;
-      }));
-    }
-  });
+  // Subscribe only to messages with id=2 (for scan reports)
+  // Note: this assumes that scan reports will have id=2
+  const connectionStatus = useWebSocketSubscription(handleMessage, [2]);
+
+  // Placeholder data for containers (this would be replaced with real data)
+  const containers = scanReports.map((log, i) => ({
+    id: `container-${i}`,
+    name: `container-${i}`,
+    status: 'running',
+    image: 'N/A',
+    created: new Date().toISOString(),
+    cpu: 0,
+    memory: 0,
+    anomalyScore: 0,
+    vulnerabilities: 0,
+    rawLog: log
+  }));
 
   return (
     <div className="space-y-6">
@@ -43,7 +48,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-muted-foreground">
-            Monitor and manage your container security from one place
+            Monitor and manage your container security from one place ({connectionStatus})
           </p>
         </div>
       </div>
@@ -51,102 +56,68 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatusCard
           title="Total Containers"
-          value={dashboardStats.totalContainers.toString()}
-          description={`${dashboardStats.runningContainers} running, ${dashboardStats.stoppedContainers} stopped`}
+          value={containers.length.toString()}
+          description={`${containers.length} running`}
           icon={<Server className="h-5 w-5" />}
-          trend="+2 since yesterday"
+          trend="Real-time monitoring"
           trendUp={true}
         />
         <StatusCard
-          title="Active Alerts"
-          value={dashboardStats.totalAlerts.toString()}
-          description={`${dashboardStats.criticalAlerts} critical, ${dashboardStats.highAlerts} high`}
+          title="CPU Usage"
+          value="N/A"
+          description="Simplified log mode"
           icon={<AlertTriangle className="h-5 w-5" />}
-          trend="+5 since yesterday"
-          trendUp={true}
-          trendIsGood={false}
-        />
-        <StatusCard
-          title="Total Vulnerabilities"
-          value={dashboardStats.totalVulnerabilities.toString()}
-          description={`${dashboardStats.criticalVulnerabilities} critical, ${dashboardStats.highVulnerabilities} high`}
-          icon={<Bug className="h-5 w-5" />}
-          trend="-8 since yesterday"
+          trend="Static"
           trendUp={false}
-          trendIsGood={true}
         />
         <StatusCard
-          title="Security Score"
-          value="75%"
-          description="Good - up from 70% last week"
-          icon={<Shield className="h-5 w-5" />}
-          trend="+5% improvement"
-          trendUp={true}
-          trendIsGood={true}
+          title="Memory Usage"
+          value="N/A"
+          description="Simplified log mode"
+          icon={<Bug className="h-5 w-5" />}
+          trend="Static"
+          trendUp={false}
         />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Vulnerability Trend</CardTitle>
-            <CardDescription>Last 7 days</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={vulnerabilityTrend} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCritical" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="colorHigh" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-5))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--chart-5))" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="colorMedium" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-4))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--chart-4))" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="colorLow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      borderColor: 'hsl(var(--border))',
-                      color: 'hsl(var(--foreground))'
-                    }} 
-                  />
-                  <Area type="monotone" dataKey="critical" name="Critical" stroke="hsl(var(--destructive))" fillOpacity={1} fill="url(#colorCritical)" />
-                  <Area type="monotone" dataKey="high" name="High" stroke="hsl(var(--chart-5))" fillOpacity={1} fill="url(#colorHigh)" />
-                  <Area type="monotone" dataKey="medium" name="Medium" stroke="hsl(var(--chart-4))" fillOpacity={1} fill="url(#colorMedium)" />
-                  <Area type="monotone" dataKey="low" name="Low" stroke="hsl(var(--chart-2))" fillOpacity={1} fill="url(#colorLow)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <AlertsPreview alerts={alerts} />
+        <StatusCard
+          title="Security Status"
+          value="Monitoring"
+          description="Real-time security analysis"
+          icon={<Shield className="h-5 w-5" />}
+          trend="Active"
+          trendUp={true}
+        />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="overview">Container Status</TabsTrigger>
-          <TabsTrigger value="scan">Scan Reports</TabsTrigger>
+          <TabsTrigger value="metrics">Scan Reports</TabsTrigger>
         </TabsList>
+
         <TabsContent value="overview" className="mt-4">
-          <ContainerTable containers={containerStats} />
+          <ContainerTable containers={containers} />
         </TabsContent>
-        <TabsContent value="scan" className="mt-4">
-          <ScanReportTable scanResults={scanResults} />
+
+        <TabsContent value="metrics" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Scan Reports</CardTitle>
+              <CardDescription>Security scan results will appear here</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {scanReports.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  No scan reports available...
+                </div>
+              ) : (
+                <div className="space-y-2 font-mono text-sm">
+                  {scanReports.map((report, i) => (
+                    <div key={i} className="bg-muted px-3 py-1 rounded">{report}</div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

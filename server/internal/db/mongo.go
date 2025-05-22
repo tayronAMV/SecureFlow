@@ -2,11 +2,11 @@ package db
 
 import (
 	"context"
-	"fmt"
+	
 	"server/internal/db/models"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"server/internal/logic"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -33,42 +33,33 @@ func InitMongo() error {
 	return nil
 }
 
-
-func InsertLog(log interface{}, isAnomalyLog bool) error {
+func InsertLog(log string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if isAnomalyLog {
-		anomalyLogCollection.InsertOne(ctx, log)
-	}else{
-		LogCollection.InsertOne(ctx, log)
-	}
-	return nil 
+	LogCollection.InsertOne(ctx, log)
 }
 
 
+var Anomaly_arr = make([]*models.AnomalyLog,100)
 
-func FindLogs(anomaly models.AnomalyLog) ([]string ,  error) {
-	filter := bson.M{
-		"timestamp": bson.M{
-			"$gte": anomaly.Timestamp.Add(-10 * time.Second),
-			"$lte": anomaly.Timestamp.Add(10 * time.Second),
-		},
-		"UID": anomaly.UID,
-	}
+func InsertAnomaly_Log(log *models.AnomalyLog){
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if len(Anomaly_arr) >= 100 {
+		logic.Anomaly_detection(Anomaly_arr)
+		Anomaly_arr = Anomaly_arr[:0]
+	}
+	Anomaly_arr = append(Anomaly_arr, log)
+	anomalyLogCollection.InsertOne(ctx,log)	
+	//send to ui 
+	
 
-	var logs []string
-	cpuCursor, err := LogCollection.Find(ctx, filter)
-	if err != nil {
-		return nil, fmt.Errorf("cpu query error: %w", err)
-	}
-	defer cpuCursor.Close(ctx)
-	if err := cpuCursor.All(ctx, &logs); err != nil {
-		return nil, fmt.Errorf("cpu decode error: %w", err)
-	}
-	return logs, nil
 }
+
+
+
+
+
 
 

@@ -5,38 +5,28 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	
+
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 
 func GetKubernetesClient() (*kubernetes.Clientset, error) {
 	// If inside cluster
-	config, err := rest.InClusterConfig()
+	config, err := clientcmd.BuildConfigFromFlags("", "/etc/rancher/k3s/k3s.yaml")
 	if err != nil {
-		// fallback to kubeconfig for local testing
-		kubeconfig := filepath.Join(homeDir(), ".kube", "config")
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			return nil, err
-		}
+		fmt.Println("nooooooo clientswet")
+		return nil , err
 	}
 	return kubernetes.NewForConfig(config)
 }
 
-func homeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-	return os.Getenv("USERPROFILE") // windows
-}
 
 
 
@@ -58,7 +48,8 @@ func FetchPodLogs(clientset *kubernetes.Clientset, namespace, podName, container
 	if err != nil {
 		return "", fmt.Errorf("error reading logs: %v", err)
 	}
-	return buf.String(), nil
+	
+	return buf.String(),nil
 }
 
 func int64Ptr(i int64) *int64 {

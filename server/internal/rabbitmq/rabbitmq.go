@@ -3,11 +3,12 @@ package rabbitmq
 import (
 	"encoding/json"
 	"log"
+	"server/internal/db"
 	"server/internal/db/models"
+
 	// "server/internal/db"
 	"github.com/streadway/amqp"
 )
-
 
 // Global handles
 var (
@@ -59,20 +60,33 @@ func Connect_to_agent() error {
 	//TODO , change for recieving any log from agent , types 0 - 5 
 	go func() {
 		for msg := range msgs {
-			var logEvent models.Consumer_msg
-			err := json.Unmarshal(msg.Body, &logEvent)
+			var generic_struct models.Consumer_msg
+			err := json.Unmarshal(msg.Body,&generic_struct)
 			if err != nil {
 				log.Printf("⚠️ Invalid JSON: %v", err)
 				continue
 			}
-			log.Println("recived anomaly logs ")
-			// err = db.InsertLog(logEvent.Body , logEvent.Id)
-			// if err != nil{
-			// 	log.Println("Anomaly log DB insertion error " , err)
-			// 	continue 
-			// }
 
-		}
+			switch generic_struct.Id{
+			case 1 :
+				var s models.Consumer_activity_log
+				err := json.Unmarshal(msg.Body , &s)
+				if err != nil {					
+					log.Printf("⚠️ Invalid JSON: %v", err)
+					continue
+				}
+				db.InsertLog(s.Body)
+			
+			case 2 :
+				var s models.Consumer_Anomaly_log
+				err := json.Unmarshal(msg.Body , &s)
+				if err != nil {					
+					log.Printf("⚠️ Invalid JSON: %v", err)
+					continue
+				}
+				db.InsertAnomaly_Log(&s.Body)
+
+		}}
 	}()
 
 	return nil

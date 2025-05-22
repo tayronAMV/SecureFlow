@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { policies } from '@/lib/mockData';
+
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import PoliciesTable from '@/components/policies/PoliciesTable';
@@ -11,7 +11,7 @@ export default function PoliciesPage() {
   const [activeTab, setActiveTab] = useState('policies');
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<any>(null);
-
+  const [policies, setPolicies] = useState<any[]>([]);
   const handleAddPolicy = () => {
     setEditingPolicy(null);
     setShowPolicyForm(true);

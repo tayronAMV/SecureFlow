@@ -33,11 +33,11 @@ func CleanRawLogs(raw string) []string {
 }
 
 var (
-	logRegex = regexp.MustCompile(`(?P<time>\S+)\s+(?P<method>GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(?P<path>\S+)\s+(?P<status>\d{3})`)
+	logRegex = regexp.MustCompile(`^(?P<time>\S+)\s+\S+\s+\S+\s+\S+\s+\[[^\]]+\]\s+"(?P<method>GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(?P<path>\S+)[^"]*"\s+(?P<status>\d{3})`)
 	idRegex  = regexp.MustCompile(`\d+|[a-fA-F0-9\-]{8,}`) // match digits or UUIDs
 )
 
-// Main parsing function
+// Main parsing function - need to add regex - only for nginx
 func ParseLogs(lines []string) []models.LogItem {
 	var parsed []models.LogItem
 
@@ -169,7 +169,8 @@ func CountCandidates(candidates [][]string, transactions [][]string, minSupport 
 }
 
 
-func RunApriori(transactions [][]string, minSupport int) [][]string {
+func RunApriori(transactions [][]string) [][]string {
+	minSupport := int(0.2 * float64(len(transactions)))
 	var result [][]string
 	L1 := Count1Itemsets(transactions, minSupport)
 	Lk := [][]string{}

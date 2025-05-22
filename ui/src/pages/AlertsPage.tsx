@@ -1,41 +1,40 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useCallback, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, AlertTriangle, Info, CheckCircle2, Search, Filter } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import LogStream from '@/components/alerts/LogStream';
 import AnomalyCard from '@/components/alerts/AnomalyCard';
-import { useWebSocket, FlowEvent, Anomaly } from '@/hooks/useWebSocket';
+import { useWebSocketSubscription, LogMessage, useMessageHistory } from '@/contexts/WebSocketContext';
 
 export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState('logs');
   const [searchQuery, setSearchQuery] = useState('');
-  const [logs, setLogs] = useState<FlowEvent[]>([]);
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
-
-  // Use wss:// for secure WebSocket connection
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
   
-  useWebSocket(wsUrl, (message) => {
-    if (message.type === 'log') {
-      setLogs(prev => [...prev.slice(-999), message.data]);
-    } else if (message.type === 'anomaly') {
-      setAnomalies(prev => [...prev.slice(-99), message.data]);
-    }
-  });
+  // Use the message history hook to get persistent logs for channel 1
+  const { messages: logHistory } = useMessageHistory(1);
+  const [logs, setLogs] = useState<string[]>([]);
 
-  // Filter logs based on search query
-  const filteredLogs = logs.filter(log => 
-    log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.source.toLowerCase().includes(searchQuery.toLowerCase())
+  // Initialize logs from history when the component mounts or history changes
+  useEffect(() => {
+    setLogs(logHistory);
+  }, [logHistory]);
+
+  const [anomalies, setAnomalies] = useState<any[]>([]); // Anomaly logic placeholder for later
+
+  const handleMessage = useCallback((msg: LogMessage) => {
+    // With channel filtering in the context, we only receive messages with id=1 here
+    setLogs(prev => [...prev, msg.message]);
+  }, []);
+
+  // Subscribe only to messages with id=1
+  const connectionStatus = useWebSocketSubscription(handleMessage, [1]);
+
+  const filteredLogs = logs.filter(log =>
+    log.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Filter critical and high severity anomalies
-  const criticalAnomalies = anomalies.filter(anomaly => 
+  const criticalAnomalies = anomalies.filter(anomaly =>
     anomaly.severity === 'critical' || anomaly.severity === 'high'
   );
 
@@ -45,7 +44,7 @@ export default function AlertsPage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Alerts & Logs</h2>
           <p className="text-muted-foreground">
-            Monitor security events and system logs in real-time
+            Monitor security events and system logs in real-time ({connectionStatus})
           </p>
         </div>
       </div>
@@ -55,7 +54,7 @@ export default function AlertsPage() {
           <TabsTrigger value="logs">Logs Stream</TabsTrigger>
           <TabsTrigger value="anomalies">Anomaly Updates</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="logs" className="mt-4 space-y-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -71,10 +70,10 @@ export default function AlertsPage() {
               <Filter className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <LogStream logs={filteredLogs} />
         </TabsContent>
-        
+
         <TabsContent value="anomalies" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
             {criticalAnomalies.map(alert => (
