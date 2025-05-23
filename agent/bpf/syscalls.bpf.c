@@ -22,6 +22,7 @@ int log_execve(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_EXECVE;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -41,6 +42,7 @@ int log_execveat(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_EXECVEAT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -60,6 +62,7 @@ int log_open(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_OPEN;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -79,6 +82,7 @@ int log_unlink(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_UNLINK;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -98,6 +102,7 @@ int log_chmod(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_CHMOD;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -117,6 +122,7 @@ int log_mount(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_MOUNT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -136,6 +142,7 @@ int log_setuid(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_SETUID;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -152,6 +159,7 @@ int log_socket(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_SOCKET;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     
@@ -168,6 +176,7 @@ int log_connect(struct trace_event_raw_sys_enter *ctx)
     struct syscall_event_t event = {};
     u64 id = bpf_get_current_pid_tgid();
     event.pid = id >> 32;
+    event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_CONNECT;
     bpf_get_current_comm(&event.comm, sizeof(event.comm));
     

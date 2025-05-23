@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"bytes"
 )
 
 var (
@@ -156,5 +157,33 @@ func (c CPUUsage) String() string {
 		c.CPUTime,
 		c.CPUUsageRate*100,
 		c.CPULimit,
+	)
+}
+
+func (e RawSyscallEvent) String() string {
+	eventTypes := map[uint32]string{
+		1: "execve",
+		2: "execveat",
+		3: "open",
+		4: "unlink",
+		5: "chmod",
+		6: "mount",
+		7: "setuid",
+		8: "socket",
+		9: "connect",
+	}
+
+	eventTypeStr, ok := eventTypes[e.Type]
+	if !ok {
+		eventTypeStr = fmt.Sprintf("unknown(%d)", e.Type)
+	}
+
+	return fmt.Sprintf(
+		"Syscall [%s] PID: %d COMM: %s FILE: %s CGID: %d",
+		eventTypeStr,
+		e.Pid,
+		bytes.TrimRight(e.Comm[:], "\x00"),
+		bytes.TrimRight(e.Filename[:], "\x00"),
+		e.Cgid,
 	)
 }

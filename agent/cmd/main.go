@@ -3,7 +3,7 @@ package main
 import (
 	"agent/internal"
 	"agent/pkg/kube"
-	"agent/pkg/logs"
+	// "agent/pkg/logs"
 	"log"
 	"os"
 	"os/signal"
@@ -17,23 +17,23 @@ import (
 
 func agent_Start(){
 	
-	internal.InitSyscallMonitor()
+	
 	_, err := kube.FetchContainerMappings()
 	if err != nil {
 		log.Printf("❌ Failed to fetch container mappings: %v", err)
 		return
 	}
-		
+	internal.StartSyscallReader()	
 	// internal.StartResourceCollector(mappings)
-	logs.RabbitMQ_producer_Start()
-	defer logs.RabbitMQ_producer_Close()
+	// logs.RabbitMQ_producer_Start()
+	// defer logs.RabbitMQ_producer_Close()
 	// internal.StartTrraficCollector()
 	for {
 
 
 		// need to make this councurrent
 
-		// internal.StartSyscallReader()
+		// 
 	
 		
 
@@ -50,11 +50,7 @@ func agent_Start(){
 }
 
 
-func agent_stop(){
-	// internal.StopSyscallMonitor()
 
-	logs.RabbitMQ_producer_Close()
-}
 
 func main() {
 	log.Println("🚀 Starting SecureFlow agent...")
@@ -64,7 +60,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	agent_stop()
+	
 	
 	log.Println("🛑 Agent stopped.")
 }

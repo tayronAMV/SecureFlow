@@ -114,8 +114,8 @@ type RawSyscallEvent struct {
 	Type     uint32
 	Comm     [16]byte
 	Filename [256]byte
+	Cgid    uint64
 }
-
 
 
 type RawFlowEvent struct {

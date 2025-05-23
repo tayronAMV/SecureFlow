@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-
+	"os"
+	"syscall"
 	"os/exec"
-	
+	"path/filepath"
 	"strings"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	// "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	
 )
 
 type ContainerMapping struct {
@@ -22,8 +24,9 @@ type ContainerMapping struct {
 	ContainerName string
 	PID           int
 	UID 		  string	
+	Cgroup        string
 }
-
+var Cgroup_mapping = make(map[uint64]ContainerMapping)
 var Pid_toContainer_Map = make(map[int]ContainerMapping) // TODO , need to pass it to the main server  , container id and the namespace for every log 
 
 // FetchContainerMappings connects to the Kubernetes API and maps container IDs to PIDs
@@ -66,15 +69,28 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 				continue
 			}
 
-			results = append(results, ContainerMapping{
+			container := ContainerMapping{
 				PodName:       pod.Name,
 				Namespace:     pod.Namespace,
 				ContainerID:   cid,
 				ContainerName: status.Name,
 				PID:           pid,
 				UID:           string(pod.UID) ,
-			})
+			}
+			results = append(results,container)
 			log.Printf("✅ Added mapping: %s/%s → PID %d", pod.Namespace, pod.Name, pid)
+
+
+			cgroupID , err:= GetContainerCgroupID(pid)
+
+			if err != nil {
+				fmt.Println("coudnt get cgroup nooooo  ",err)
+				continue
+			}
+			if _ , ok := Cgroup_mapping[cgroupID] ; !ok {
+				Cgroup_mapping[cgroupID] = container 
+				fmt.Printf("pod is %s with pid %d and the cgroup id is %d \n ",container.PodName,container.PID ,cgroupID)
+			}
 		}
 	}
 
@@ -82,7 +98,6 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 	return results, nil
 }
 
-// getPidFromDocker uses `docker inspect` to extract the PID of a container
 // getPidFromCrictl uses `crictl inspect` to extract the PID of a container
 func getPidFromCrictl(containerID string) (int, error) {
 	// Remove the "cri-o://" or "containerd://" prefix if present
@@ -108,4 +123,36 @@ func getPidFromCrictl(containerID string) (int, error) {
 }
 func PidToUid(pid int) string {
 	return Pid_toContainer_Map[pid].UID 
+}
+
+
+
+func GetContainerCgroupID(pid int) (uint64, error) {
+	cgroupPath, err := readCgroupPath(pid)
+	if err != nil {
+		return 0, err
+	}
+
+	fullPath := filepath.Join("/sys/fs/cgroup", cgroupPath)
+	stat, err := os.Stat(fullPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to stat cgroup path: %w", err)
+	}
+
+	return stat.Sys().(*syscall.Stat_t).Ino, nil
+}
+
+func readCgroupPath(pid int) (string, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return "", fmt.Errorf("could not read cgroup file for PID %d: %w", pid, err)
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) == 3 && strings.HasPrefix(parts[2], "/kubepods") {
+			return parts[2], nil // already relative
+		}
+	}
+	return "", fmt.Errorf("no kubepods cgroup found for PID %d", pid)
 }
