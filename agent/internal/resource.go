@@ -13,6 +13,32 @@ import (
 
 )
 
+
+func ResolvePathForPID(pid int) (string, error) {
+  
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+	  return "", fmt.Errorf("could not read cgroup file for PID %d: %w", pid, err)
+	}
+  
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	  parts := strings.SplitN(line, ":", 3)
+	  if len(parts) != 3 {
+		continue
+	  }
+	  rel := parts[2]
+	  if !strings.Contains(rel, "kubepods") {
+		continue
+	  }
+	  rel = strings.TrimPrefix(rel, "/")
+	  full := filepath.Join("/sys/fs/cgroup", rel)
+	  if fi, err := os.Stat(full); err == nil && fi.IsDir() {
+		return full, nil
+	  }
+	}
+	return "", fmt.Errorf("no kubepods cgroup found for PID %d", pid)
+  }
+
 // -----------------------------
 // MEMORY USAGE
 // -----------------------------
@@ -233,10 +259,7 @@ func CollectAndUpdateCPU(containerID string, pid int) error{
 	}
 	cur.UID = UID 
 	// send to DB! 
-	logs.Producer(logs.Producer_msg{
-		Body: *cur,
-		Id : 1, 
-	})
+	fmt.Println(cur.String())
 
 
 	
@@ -270,10 +293,7 @@ func CollectAndUpdateDisk(containerID string, pid int) error {
 	}
 	cur.UID = UID 
 	// send to server
-	logs.Producer(logs.Producer_msg{
-		Body: *cur,
-		Id : 3, 
-	})
+	fmt.Println(cur.String())
 
 	return nil
 }
@@ -303,10 +323,7 @@ func CollectAndUpdateMemory(containerID string, pid int) error {
 	}
 	cur.UID = UID 
 
-	logs.Producer(logs.Producer_msg{
-		Body: *cur,
-		Id : 2, 
-	})
+	fmt.Println(cur.String())
 
 	return nil
 }

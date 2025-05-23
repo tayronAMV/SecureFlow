@@ -2,37 +2,43 @@ package main
 
 import (
 	"agent/internal"
+	"agent/pkg/kube"
+	"agent/pkg/logs"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"agent/pkg/logs"
-	"agent/pkg/kube"
-	"agent/pkg/utils"
+
+	// "agent/pkg/utils"
 	"time"
+
+	
 )
 
 func agent_Start(){
-	internal.Traffic_INIT()
-	// internal.InitSyscallMonitor()
+	
+	internal.InitSyscallMonitor()
+	_, err := kube.FetchContainerMappings()
+	if err != nil {
+		log.Printf("❌ Failed to fetch container mappings: %v", err)
+		return
+	}
+		
+	// internal.StartResourceCollector(mappings)
 	logs.RabbitMQ_producer_Start()
-	internal.StartTrraficCollector()
+	defer logs.RabbitMQ_producer_Close()
+	// internal.StartTrraficCollector()
 	for {
-		mappings, err := kube.FetchContainerMappings()
-		if err != nil {
-			log.Printf("❌ Failed to fetch container mappings: %v", err)
-			return
-		}
-		internal.Attach_bpf_network(mappings)
+
 
 		// need to make this councurrent
 
 		// internal.StartSyscallReader()
 	
-		// internal.StartResourceCollector(mappings)
+		
 
 		time.Sleep(120 * time.Second)
-		utils.Send_to_Server_Reset()
+		// utils.Send_to_Server_Reset()
 
 		
 
@@ -45,8 +51,8 @@ func agent_Start(){
 
 
 func agent_stop(){
-	internal.StopSyscallMonitor()
-	internal.Traffic_close()
+	// internal.StopSyscallMonitor()
+
 	logs.RabbitMQ_producer_Close()
 }
 

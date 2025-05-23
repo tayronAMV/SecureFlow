@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-
+	"time"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -72,9 +72,9 @@ func RabbitMQ_producer_Start() {
 }
 
 func Producer(evt Producer_msg) {
-	// if evt.Id == 4 { 
-	// 	fmt.Println(evt.Body)
-	// }
+	
+	fmt.Println(evt.Body)
+	
 
 	body, err := json.Marshal(evt)
 	if err != nil {
@@ -95,6 +95,8 @@ func Producer(evt Producer_msg) {
 		return
 	}
 
+	
+
 }
 
 
@@ -108,3 +110,51 @@ func RabbitMQ_producer_Close() {
 }
 
 
+func (m MemoryUsage) String() string {
+	return fmt.Sprintf(
+		"Memory Usage [UID: %s]\n"+
+			"Timestamp:        %s\n"+
+			"Used Memory:      %d bytes\n"+
+			"Memory Limit:     %d bytes\n"+
+			"RSS:              %d bytes\n"+
+			"Cache Memory:     %d bytes\n"+
+			"Memory Usage Rate: %.2f%%\n",
+		m.UID,
+		m.Timestamp.Format(time.RFC3339),
+		m.UsedMemory,
+		m.MemoryLimit,
+		m.RSS,
+		m.CacheMemory,
+		m.MemoryUsageRate*100,
+	)
+}
+
+func (d DiskIOUsage) String() string {
+	return fmt.Sprintf(
+		"Disk I/O Usage [UID: %s]\n"+
+			"Timestamp:         %s\n"+
+			"Disk Read Bytes:   %d\n"+
+			"Disk Write Bytes:  %d\n"+
+			"Disk Usage Rate:   %.2f%%\n",
+		d.UID,
+		d.Timestamp.Format(time.RFC3339),
+		d.DiskReadBytes,
+		d.DiskWriteBytes,
+		d.DiskUsageRate*100,
+	)
+}
+
+func (c CPUUsage) String() string {
+	return fmt.Sprintf(
+		"CPU Usage [UID: %s]\n"+
+			"Timestamp:        %s\n"+
+			"CPU Time:         %d ns\n"+
+			"CPU Usage Rate:   %.2f%%\n"+
+			"CPU Limit:        %d units\n",
+		c.UID,
+		c.Timestamp.Format(time.RFC3339),
+		c.CPUTime,
+		c.CPUUsageRate*100,
+		c.CPULimit,
+	)
+}

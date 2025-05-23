@@ -1,189 +1,199 @@
 package internal
 
 import (
-	"agent/pkg/kube"
+	
 	"agent/pkg/logs"
-	"agent/pkg/utils"
+	
 	"bytes"
 	"encoding/binary"
-	"net"
+	
 	"log"
 	"time"
-	"os/exec"
-	"strconv"
-	"strings"
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+	"fmt"
 )
 
-var (
-	cw     *CgroupWatcher
-	reader *ringbuf.Reader
-	objs   struct {
-		MonitorIngress *ebpf.Program `ebpf:"monitor_ingress"`
-		MonitorEgress  *ebpf.Program `ebpf:"monitor_egress"`
-		Events         *ebpf.Map     `ebpf:"events"`
-	}
-)
 
-func Traffic_INIT(){
-	spec, err := ebpf.LoadCollectionSpec("bpf/traffic.bpf.o")
-	if err != nil {
-		log.Fatalf("❌ Failed to load BPF spec: %v", err)
-	}
-
-	if err := spec.LoadAndAssign(&objs, nil); err != nil {
-		log.Fatalf("❌ Failed to assign BPF programs: %v", err)
-	}
-	if objs.MonitorIngress == nil {
-		log.Println("❌ MonitorIngress is nil")
-	} else {
-		fd :=  objs.MonitorIngress.FD()
-		log.Printf("✅ MonitorIngress loaded with FD = %d", fd)
-		
-	}
-
-	if objs.MonitorEgress == nil {
-		log.Println("❌ MonitorEgress is nil")
-	} else {
-		fd := objs.MonitorEgress.FD()
-		log.Printf("✅ MonitorEgress loaded with FD = %d", fd)
-	}
-
-	cw = New()
-}
-
-func Attach_bpf_network(mappings []kube.ContainerMapping) {
-	log.Println("🔄 Syncing container PIDs and attaching BPF trrafic code ")
-	for _, m := range mappings {
-		cgPath, err := ResolvePathForPID(m.PID)
-		log.Println(cgPath , " plsssss ")
-		if err == nil {
-			cw.AttachIfNeeded(cgPath, objs.MonitorIngress, ebpf.AttachCGroupInetIngress)
-			cw.AttachIfNeeded(cgPath, objs.MonitorEgress, ebpf.AttachCGroupInetEgress)
-		}
-	}
-}
-
-func Traffic_close(){
-	if reader != nil {
-		reader.Close()
-	}
-	if cw != nil {
-		cw.Cleanup()
-	}
-}
 
 
 func StartTrraficCollector() {
-	var err error
-	reader, err = ringbuf.NewReader(objs.Events)
+	// Load eBPF program
+	spec, err := ebpf.LoadCollectionSpec("bpf/traffic.bpf.o")
 	if err != nil {
-		log.Fatalf("❌ Failed to open ring buffer: %v", err)
+		log.Fatalf("❌ LoadCollectionSpec: %v", err)
+	}
+	
+	objs := struct {
+		TcIngress *ebpf.Program `ebpf:"tc_ingress"`
+		TcEgress  *ebpf.Program `ebpf:"tc_egress"`
+		Events    *ebpf.Map     `ebpf:"events"`
+	}{}
+	
+	if err := spec.LoadAndAssign(&objs, nil); err != nil {
+		log.Fatalf("❌ LoadAndAssign: %v", err)
+	}
+	defer objs.TcIngress.Close()
+	defer objs.TcEgress.Close()
+	defer objs.Events.Close()
+
+	// Initialize link tracker
+	tracker := NewLinkTracker()
+	defer tracker.CloseAll()
+
+	// Attach to containers
+	if err := attachToContainers(&objs, tracker); err != nil {
+		log.Fatalf("❌ Failed to attach to containers: %v", err)
 	}
 
+	// Setup ringbuf reader
+	rd, err := ringbuf.NewReader(objs.Events)
+	if err != nil {
+		log.Fatalf("❌ Failed to open ringbuf: %v", err)
+	}
+	defer rd.Close()
+
+	log.Println("📦 Listening to ring buffer...")
+
+	// Setup signal handling for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	// Channel for re-scanning containers
+	rescanTicker := time.NewTicker(30 * time.Second)
+	defer rescanTicker.Stop()
+
+	// Start reading from ringbuf in a goroutine
 	go func() {
-		log.Println("🟢 Agent running: monitoring all pod traffic via cgroup/skb...")
 		for {
-			record, err := reader.Read()
-			if err != nil {
-				log.Printf("⚠️ Error reading from ring buffer: %v", err)
-				break
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				record, err := rd.Read()
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					log.Printf("❌ ringbuf read error: %v", err)
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+
+				var event logs.RawFlowEvent
+				if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
+					log.Printf("❌ Failed to parse event: %v", err)
+					continue
+				}
+
+				// Enhanced packet information display
+				srcIP := ipToString(event.SrcIP)
+				dstIP := ipToString(event.DstIP)
+				proto := protocolToString(event.Protocol)
+				dir := directionToString(event.Direction)
+				dpi := dpiProtocolToString(event.DpiProtocol)
+
+				fmt.Printf("📦 [%s] %s %s:%d -> %s:%d (%s) Len=%d", 
+					dir, proto, srcIP, event.SrcPort, dstIP, event.DstPort, dpi, event.PayloadLen)
+
+				// Add protocol-specific information
+				if event.DpiProtocol == 1 && event.Method[0] != 0 { // HTTP
+					method := nullTerminatedString(event.Method[:])
+					path := nullTerminatedString(event.Path[:])
+					fmt.Printf(" [%s %s]", method, path)
+				} else if event.DpiProtocol == 2 && event.QueryName[0] != 0 { // DNS
+					queryName := nullTerminatedString(event.QueryName[:])
+					fmt.Printf(" [Query: %s Type: %d]", queryName, event.QueryType)
+				} else if event.DpiProtocol == 3 { // ICMP
+					fmt.Printf(" [Type: %d]", event.IcmpType)
+				}
+
+				fmt.Printf(" @%d\n", event.Timestamp)
 			}
-
-			var raw logs.RawFlowEvent
-			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &raw); err != nil {
-				log.Printf("❌ Failed to decode event: %v", err)
-				continue
-			}
-			event := logs.FlowEvent{
-				Timestamp:     convertKtimeToTimestamp(raw.Timestamp),
-				SrcIP:         uint32ToIP(raw.SrcIP),
-				DstIP:        uint32ToIP(raw.DstIP),
-				SrcPort:       raw.SrcPort,
-				DstPort:       raw.DstPort,
-				Protocol:      raw.Protocol,
-				Direction:     raw.Direction,
-				PayloadLen:    raw.PayloadLen,
-				DPIProtocol:   raw.DPIProtocol,
-				Reserved1:     raw.Reserved1,
-				Reserved2:     raw.Reserved2,
-				HTTPMethod:    raw.HTTPMethod,
-				HTTPPath:      raw.HTTPPath,
-				DNSQueryName:  raw.DNSQueryName,
-				DNSQueryType:  raw.DNSQueryType,
-				ICMPType:      raw.ICMPType,
-				Pid:           raw.Pid,
-		}
-
-		
-			UID := kube.PidToUid(int(event.Pid))
-
-			//calculate Network usage for this container , for Anomaly_log
-			if log, ok := utils.Container_uid_map[UID]; ok {
-				log.Network += float64(event.PayloadLen)
-			}else{
-				utils.Container_uid_map[UID] = &logs.Anomaly_log{}
-			}
-			
-			
-			event.UID = UID 
-			//send to the server 
-			// if event.SrcIP== "0.0.0.0" && event.DstIP== "0.0.0.0"{
-			// 	continue 
-			// }	
-			log.Printf(
-				`{"timestamp":%v, "src_ip":%v, "dst_ip":%v, "src_port":%d, "dst_port":%d, "protocol":%d, "direction":%d, "payload_len":%d, "dpi_protocol":%d, "http_method":"%s", "http_path":"%s", "dns_query_name":"%s", "dns_query_type":%d, "icmp_type":%d, "pid":%d, "uid":"%s \n"}`,
-				event.Timestamp,
-				event.SrcIP,
-				event.DstIP,
-				event.SrcPort,
-				event.DstPort,
-				event.Protocol,
-				event.Direction,
-				event.PayloadLen,
-				event.DPIProtocol,
-				string(bytes.Trim(event.HTTPMethod[:], "\x00")),
-				string(bytes.Trim(event.HTTPPath[:], "\x00")),
-				string(bytes.Trim(event.DNSQueryName[:], "\x00")),
-				event.DNSQueryType,
-				event.ICMPType,
-				event.Pid,
-				event.UID,
-			)
-			logs.Producer(logs.Producer_msg{
-				Body: event,
-				Id : 4 , 
-			})
-
-			
 		}
 	}()
+
+	// Main event loop
+	for {
+		select {
+		case <-stop:
+			log.Println("👋 Received signal, cleaning up...")
+			goto cleanup
+
+		case <-rescanTicker.C:
+			log.Println("🔄 Rescanning for new containers...")
+			if err := attachToContainers(&objs, tracker); err != nil {
+				log.Printf("❌ Failed to rescan containers: %v", err)
+			}
+		}
+	}
+
+cleanup:
+	// Cancel context to stop ringbuf reader
+	cancel()
+	
+	// Close all links (defer will also handle this)
+	tracker.CloseAll()
+	rd.Close()
+	
+	log.Println("✅ Cleanup complete")
 }
 
 
 
-func uint32ToIP(ip uint32) string {
-	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, ip)
-	return net.IP(b).String()
+func ipToString(ip uint32) string {
+	return fmt.Sprintf("%d.%d.%d.%d",
+		byte(ip), byte(ip>>8), byte(ip>>16), byte(ip>>24))
 }
 
-func convertKtimeToTimestamp(ktimeNS uint64) (time.Time) {
-	// Step 1: Get boot time (in seconds since epoch)
-	out, err := exec.Command("cut", "-f1", "-d.", "/proc/uptime").Output()
-	if err != nil {
-		return time.Time{}
+func protocolToString(proto uint8) string {
+	switch proto {
+	case 1:
+		return "ICMP"
+	case 6:
+		return "TCP"
+	case 17:
+		return "UDP"
+	default:
+		return fmt.Sprintf("Proto_%d", proto)
 	}
+}
 
-	uptimeSec, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-	if err != nil {
-		return time.Time{}
+func dpiProtocolToString(dpi uint8) string {
+	switch dpi {
+	case 0:
+		return "Unknown"
+	case 1:
+		return "HTTP"
+	case 2:
+		return "DNS"
+	case 3:
+		return "ICMP"
+	default:
+		return fmt.Sprintf("DPI_%d", dpi)
 	}
+}
 
-	bootTime := time.Now().Add(-time.Duration(uptimeSec) * time.Second)
+func directionToString(dir uint8) string {
+	if dir == 0 {
+		return "Egress"
+	}
+	return "Ingress"
+}
 
-	// Step 2: Convert ktime to duration
-	eventTime := bootTime.Add(time.Duration(ktimeNS) * time.Nanosecond)
-	return eventTime
+func nullTerminatedString(b []byte) string {
+	for i, v := range b {
+		if v == 0 {
+			return string(b[:i])
+		}
+	}
+	return string(b)
 }

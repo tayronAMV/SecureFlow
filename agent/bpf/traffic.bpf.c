@@ -1,6 +1,5 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
 #include <bpf/bpf_endian.h>
 #include "traffic.h"
 
@@ -8,6 +7,12 @@
 #define UDP 17
 #define ICMP 1
 #define ETH_P_IP 0x0800
+
+// TC return codes
+#define TC_ACT_OK 0
+#define TC_ACT_SHOT 2
+#define TC_ACT_PIPE 3
+#define TC_ACT_STOLEN 4
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -34,126 +39,126 @@ static __always_inline void parse_http(struct __sk_buff *ctx, void *data, void *
     char buf[256] = {};
     int len = load_payload(ctx, data, payload, data_end, buf, sizeof(buf));
 
-#pragma unroll
-    for (int i = 0; i < 8; i++) {
-        if (i >= len) break;
-        if (i >= len || buf[i] == ' ') break;
+    // Extract HTTP method
+    for (int i = 0; i < 8 && i < len; i++) {
+        if (buf[i] == ' ') break;
         evt->method[i] = buf[i];
     }
 
+    // Find path start (after first space)
     int p_off = 0;
-#pragma unroll
-    for (int i = 0; i < 8; i++) {
-        if (i >= len) break;
-        if (i >= len || buf[i] == ' ') { p_off = i + 1; break; }
+    for (int i = 0; i < 256 && i < len; i++) {
+        if (buf[i] == ' ') { p_off = i + 1; break; }
     }
 
-#pragma unroll
-    for (int i = 0; i < 64; i++) {
-        if (i >= len) break;
-        if (p_off + i >= len || buf[p_off + i] == ' ') break;
+    // Extract path
+    for (int i = 0; i < 64 && (p_off + i) < len; i++) {
+        if (buf[p_off + i] == ' ') break;
         evt->path[i] = buf[p_off + i];
     }
 
-    evt->dpi_protocol = 1;
+    evt->dpi_protocol = 1; // HTTP
 }
 
 static __always_inline void parse_dns(struct __sk_buff *ctx, void *data, void *payload,
                                       void *data_end, struct flow_event_t *evt) {
+    // DNS header is 12 bytes, question starts after
     void *q = payload + 12;
     if (q >= data_end) return;
 
     char name[64] = {};
     int len = load_payload(ctx, data, q, data_end, name, sizeof(name));
 
-#pragma unroll
-    for (int i = 0; i < 64; i++) {
-        if (i >= len) break;
+    // Copy DNS query name
+    for (int i = 0; i < 64 && i < len; i++) {
         char c = name[i];
         evt->query_name[i] = c;
         if (c == 0) { len = i + 1; break; }
     }
 
+    // Extract query type if available
     if ((void *)q + len + 2 <= data_end) {
         __u16 qtype = 0;
         bpf_skb_load_bytes(ctx, (long)((void *)q - data) + len, &qtype, sizeof(qtype));
         evt->query_type = bpf_ntohs(qtype);
     }
 
-    evt->dpi_protocol = 2;
+    evt->dpi_protocol = 2; // DNS
 }
 
 static __always_inline void parse_icmp(struct icmphdr *icmp, struct flow_event_t *evt) {
     evt->icmp_type = icmp->type;
-    evt->dpi_protocol = 3;
+    evt->dpi_protocol = 3; // ICMP
 }
 
-static __always_inline int emit_and_return(struct flow_event_t *evt)
-{
-    bpf_printk("Submitting event: proto \n ");
+static __always_inline int emit_and_return(struct flow_event_t *evt) {
+    bpf_printk("TC: Submitting packet event, proto=%d\n", evt->protocol);
     bpf_ringbuf_submit(evt, 0);
-    return 1;                          // allow packet (BPF_SKB_PASS)
+    return TC_ACT_OK;
 }
 
-static __always_inline int discard_and_return(struct flow_event_t *evt)
-{
-        
-    bpf_printk("Submitting event: proto \n ");
+static __always_inline int discard_and_return(struct flow_event_t *evt) {
+    bpf_printk("TC: Submitting error event, proto=%d\n", evt->protocol);
     bpf_ringbuf_submit(evt, 0);
-    return 1;                          // still allow packet
+    return TC_ACT_OK;
 }
 
 static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction) {
     void *data     = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
 
-    struct ethhdr *eth = data; // layer 2 parsing 
+    struct ethhdr *eth = data;
     if (check_bounds(eth, data_end, sizeof(*eth)))
-        return 1;
+        return TC_ACT_OK;
 
+    if (bpf_ntohs(eth->h_proto) != ETH_P_IP)
+        return TC_ACT_OK;
 
-    struct iphdr *ip = (void *)eth + sizeof(*eth); // layer 3 parsing 
+    struct iphdr *ip = (void *)eth + sizeof(*eth);
     if (check_bounds(ip, data_end, sizeof(*ip)))
-        return 1;
+        return TC_ACT_OK;
 
+    if (ip->ihl < 5)
+        return TC_ACT_OK;
 
-    // if (ip->ihl < 5 || (void *)ip + ip->ihl * 4 > data_end)
-    //         return 1;
+    if ((void *)ip + (ip->ihl * 4) > data_end)
+        return TC_ACT_OK;
 
-    /* only TCP / UDP / ICMP – otherwise just pass */
     if (!(ip->protocol == TCP || ip->protocol == UDP || ip->protocol == ICMP))
-         return 1;
+        return TC_ACT_OK;
 
-    /* allocate event */
     struct flow_event_t *evt = bpf_ringbuf_reserve(&events, sizeof(*evt), 0);
     if (!evt)
-        return 0;
+        return TC_ACT_OK;
 
+    void *l4 = (void *)ip + (ip->ihl * 4);
 
-    void *l4 = (void *)ip + ip->ihl * 4; // layer 4 parsing ! 
-        
     __builtin_memset(evt, 0, sizeof(*evt));
     evt->timestamp = bpf_ktime_get_ns();
     evt->payload_len = ctx->len;
     evt->direction = direction;
-    evt->Pid = bpf_get_current_pid_tgid() >> 32;
+    evt->Pid = 0;
     evt->src_ip = ip->saddr;
     evt->dst_ip = ip->daddr;
     evt->protocol = ip->protocol;
 
     if (ip->protocol == TCP) {
         struct tcphdr *tcp = l4;
-       if (check_bounds(tcp, data_end, sizeof(*tcp)))
-         return discard_and_return(evt);
+        if (check_bounds(tcp, data_end, sizeof(*tcp)))
+            return discard_and_return(evt);
 
-        if (tcp->doff < 5 || (void *)tcp + tcp->doff * 4 > data_end)
+        if (tcp->doff < 5 || (void *)tcp + (tcp->doff * 4) > data_end)
             return discard_and_return(evt);
 
         evt->src_port = bpf_ntohs(tcp->source);
         evt->dst_port = bpf_ntohs(tcp->dest);
 
-        void *payload = (void *)tcp + tcp->doff * 4;
-        parse_http(ctx, data, payload, data_end, evt);
+        if (evt->dst_port == 80 || evt->src_port == 80 ||
+            evt->dst_port == 8080 || evt->src_port == 8080) {
+            void *payload = (void *)tcp + (tcp->doff * 4);
+            parse_http(ctx, data, payload, data_end, evt);
+        }
+
         return emit_and_return(evt);
 
     } else if (ip->protocol == UDP) {
@@ -163,8 +168,11 @@ static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction) {
 
         evt->src_port = bpf_ntohs(udp->source);
         evt->dst_port = bpf_ntohs(udp->dest);
-        void *payload = (void *)udp + sizeof(*udp);
-        parse_dns(ctx, data, payload, data_end, evt);  // parse_dns will decide if it's really DNS
+
+        if (evt->dst_port == 53 || evt->src_port == 53) {
+            void *payload = (void *)udp + sizeof(*udp);
+            parse_dns(ctx, data, payload, data_end, evt);
+        }
 
         return emit_and_return(evt);
 
@@ -180,13 +188,15 @@ static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction) {
     return discard_and_return(evt);
 }
 
-SEC("cgroup_skb/ingress")
-int monitor_ingress(struct __sk_buff *ctx) {
+// TC ingress program
+SEC("tc")
+int tc_ingress(struct __sk_buff *ctx) {
     return parse_packet(ctx, 1);
 }
 
-SEC("cgroup_skb/egress")
-int monitor_egress(struct __sk_buff *ctx) {
+// TC egress program
+SEC("tc")
+int tc_egress(struct __sk_buff *ctx) {
     return parse_packet(ctx, 0);
 }
 

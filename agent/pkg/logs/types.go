@@ -2,6 +2,7 @@ package logs
 
 import(
 	"time"
+	
 )
 type MemoryUsage struct {
 	ContainerID     string    `json:"container_id" bson:"container_id"`
@@ -13,6 +14,7 @@ type MemoryUsage struct {
 	MemoryUsageRate float64   `json:"memory_usage_rate" bson:"memory_usage_rate"`
 	UID string `json : "UID  bson:"UID`
 }
+
 
 type CPUUsage struct {
 	ContainerID   string    `json:"container_id" bson:"container_id"`
@@ -117,24 +119,22 @@ type RawSyscallEvent struct {
 
 
 type RawFlowEvent struct {
-	Timestamp     uint64
-	SrcIP         uint32
-	DstIP         uint32
-	SrcPort       uint16
-	DstPort       uint16
-	Protocol      uint8
-	Direction     uint8
-	PayloadLen    uint16
-	DPIProtocol   uint8
-	Reserved1     uint8
-	Reserved2     uint16
-
-	HTTPMethod    [8]byte
-	HTTPPath      [64]byte
-	DNSQueryName  [64]byte
-	DNSQueryType  uint16
-	ICMPType      uint8
-	_             [1]byte    // padding for 4-byte alignment
-	Pid           uint32
+	Timestamp   uint64
+	SrcIP       uint32
+	DstIP       uint32
+	SrcPort     uint16
+	DstPort     uint16
+	Protocol    uint8
+	Direction   uint8
+	PayloadLen  uint16
+	DpiProtocol uint8
+	Reserved1   uint8
+	Reserved2   uint16
+	Method      [8]byte
+	Path        [64]byte
+	QueryName   [64]byte
+	QueryType   uint16
+	IcmpType    uint8
+	Pid         uint32
 }
 
