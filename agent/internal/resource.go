@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+	"sync"
 )
+
+var mu sync.RWMutex
 
 
 func ResolvePathForPID(pid int) (string, error) {
@@ -209,121 +211,131 @@ func GetDiskIOUsage(containerID string, pid int) (*logs.DiskIOUsage, error) {
 }
 
 
-func StartResourceCollector(mappings []kube.ContainerMapping) {
+func StartResourceCollector(logCh chan logs.Producer_msg) {
+	mappingCh := make(chan struct{}, 1) // Buffered so sender never blocks
+
 	go func() {
 		fmt.Println("📊 Starting resource collector (CPU, Memory, Disk)...")
+
+		mappings := kube.GetCurrentMapping()
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
 		for {
-			for _, m := range mappings {
-				// Each function updates the global anomaly map
-				if err := CollectAndUpdateCPU(m.ContainerID, m.PID); err != nil {
-					fmt.Printf("⚠️ CPU update failed for %s: %v", m.ContainerID, err)
-				}
-				if err := CollectAndUpdateMemory(m.ContainerID, m.PID); err != nil {
-					fmt.Printf("⚠️ Memory update failed for %s: %v", m.ContainerID, err)
-				}
-				if err := CollectAndUpdateDisk(m.ContainerID, m.PID); err != nil {
-					fmt.Printf("⚠️ Disk update failed for %s: %v", m.ContainerID, err)
+			select {
+			case <-mappingCh:
+				mappings = kube.GetCurrentMapping()
+
+			case <-ticker.C:
+				for _, m := range mappings {
+					if cpu, err := CollectAndUpdateCPU(m, m.PID); err != nil {
+						fmt.Printf("⚠️ CPU update failed for %s: %v\n", m.ContainerID, err)
+					} else {
+						logCh <- logs.Producer_msg{
+							Body: logs.Encode_string(cpu),
+							Id:   1,
+						}
+					}
+
+					if mem, err := CollectAndUpdateMemory(m, m.PID); err != nil {
+						fmt.Printf("⚠️ Memory update failed for %s: %v\n", m.ContainerID, err)
+					} else {
+						logCh <- logs.Producer_msg{
+							Body: logs.Encode_string(mem),
+							Id:   1,
+						}
+					}
+
+					if disk, err := CollectAndUpdateDisk(m, m.PID); err != nil {
+						fmt.Printf("⚠️ Disk update failed for %s: %v\n", m.ContainerID, err)
+					} else {
+						logCh <- logs.Producer_msg{
+							Body: logs.Encode_string(disk),
+							Id:   1,
+						}
+					}
 				}
 			}
+		}
+	}()
 
+	// Goroutine that waits for cond to signal
+	cond := kube.GetCondition()
+	go func() {
+		for {
+			cond.L.Lock()
+			cond.Wait()
+			cond.L.Unlock()
 
-
-			time.Sleep(1 * time.Second) // wait before the next interval
+			select {
+			case mappingCh <- struct{}{}:
+			default: // don't block if already waiting
+			}
 		}
 	}()
 }
 
-func CollectAndUpdateCPU(containerID string, pid int) error{
-	cur, err := GetCPUUsage(containerID, pid)
+func CollectAndUpdateCPU(container kube.ContainerMapping , pid int) (string,error){
+	cur, err := GetCPUUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ CPU collect error for %s: %v", containerID, err)
-		return err
+		fmt.Printf("❌ CPU collect error for %s: %v", container.ContainerID, err)
+		return "",err
 	}
-	UID := kube.PidToUid(pid)
+	
 
-	if _,ok := utils.Container_uid_map[UID]; !ok{
-		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
-	}
 
-	if prev, ok := utils.CpuTrackers[UID]; ok {
-		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
-		if deltaTime > 0 {
-			deltaCPU := float64(cur.CPUTime - prev.PrevCPUTime)
-			utils.Container_uid_map[UID].CPU = deltaCPU / deltaTime
-		}
-	}
-
-	utils.CpuTrackers[UID] = logs.CpuTracker{
-		PrevTime:    cur.Timestamp,
+	utils.Update_uid_Map(container.UID , container)
+	utils.Update_cpu_Tracker(container.UID , logs.CpuTracker{
 		PrevCPUTime: cur.CPUTime,
-	}
-	cur.UID = UID 
+		PrevTime: cur.Timestamp,
+	} )
+
+	
+	cur.UID = container.UID
 	// send to DB! 
-	fmt.Println(cur.String())
+	
 
 
 	
-	return nil
+	return cur.String() , nil
 }
 
-func CollectAndUpdateDisk(containerID string, pid int) error {
-	cur, err := GetDiskIOUsage(containerID, pid)
+func CollectAndUpdateDisk(container kube.ContainerMapping, pid int) (string,error) {
+	cur, err := GetDiskIOUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ Disk I/O collect error for %s: %v\n", containerID, err)
-		return err
+		fmt.Printf("❌ Disk I/O collect error for %s: %v\n", container.ContainerID, err)
+		return "" , err
 	}
-	UID := kube.PidToUid(pid)
-	if _,ok := utils.Container_uid_map[UID]; !ok{
-		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
-	}
+	
 
-	if prev, ok := utils.DiskTrackers[UID]; ok {
-		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
-		if deltaTime > 0 {
-			deltaRead := cur.DiskReadBytes - prev.PrevReadBytes
-			deltaWrite := cur.DiskWriteBytes - prev.PrevWriteBytes
-			utils.Container_uid_map[UID].DiskIO = float64(deltaRead+deltaWrite) / deltaTime
-		}
-	}
-
-	utils.DiskTrackers[UID] = logs.DiskTracker{
-		PrevTime:       cur.Timestamp,
-		PrevReadBytes:  cur.DiskReadBytes,
+	utils.Update_uid_Map(container.UID , container)
+	utils.Update_disk_Tracker(container.UID , logs.DiskTracker{
+		PrevTime: cur.Timestamp,
+		PrevReadBytes: cur.DiskReadBytes,
 		PrevWriteBytes: cur.DiskWriteBytes,
-	}
-	cur.UID = UID 
+	})
+	cur.UID = container.UID
 	// send to server
-	fmt.Println(cur.String())
+	
 
-	return nil
+	return cur.String() , nil
 }
 
 
-func CollectAndUpdateMemory(containerID string, pid int) error {
-	cur, err := GetMemoryUsage(containerID, pid)
+func CollectAndUpdateMemory(container kube.ContainerMapping, pid int) (string,error){
+	cur, err := GetMemoryUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ Memory collect error for %s: %v\n", containerID, err)
-		return err
+		fmt.Printf("❌ Memory collect error for %s: %v\n", container.ContainerID, err)
+		return "",err
 	}
-	UID := kube.PidToUid(pid)
-	if _,ok := utils.Container_uid_map[UID]; !ok{
-		utils.Container_uid_map[UID] = &logs.Anomaly_log{}
-	}
-	if prev, ok := utils.MemoryTrackers[UID]; ok {
-		deltaTime := cur.Timestamp.Sub(prev.PrevTime).Seconds()
-		if deltaTime > 0 {
-			deltaMem := float64(cur.UsedMemory - prev.PrevUsedBytes)
-			utils.Container_uid_map[UID].Memory = deltaMem / deltaTime
-		}
-	}
-
-	utils.MemoryTrackers[UID] = logs.MemoryTracker{
-		PrevTime:      cur.Timestamp,
+	utils.Update_uid_Map(container.UID , container)
+	utils.Update_memory_Tracker(container.UID , logs.MemoryTracker{
+		PrevTime: cur.Timestamp,
 		PrevUsedBytes: cur.UsedMemory,
-	}
-	cur.UID = UID 
+	})
+	cur.UID = container.UID
 
-	fmt.Println(cur.String())
+	
 
-	return nil
+	return cur.String() , nil
 }

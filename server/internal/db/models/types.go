@@ -11,14 +11,17 @@ type AnomalyLog struct {
 	Network float64 `json:"network" bson:"network"`
 	Syscall float64 `json:"syscall" bson:"syscall"`
 	Timestamp time.Time `json:"timestamp" bson:"timestamp"` 
-	Info Container_info `json : "Info bson:"Info`
-	
+	Container ContainerMapping `json:"container" bson:"container"`
 }
 
-type Container_info struct {
-	Namespace      string `json:"namespace" bson:"namespace"`
-	PodName        string `json:"pod_name" bson:"pod_name"`
-	Container_name string `json:"container_name" bson:"container_name"`
+type ContainerMapping struct {
+	PodName       string `json:"pod_name" bson:"pod_name"`
+	Namespace     string `json:"namespace" bson:"namespace"`
+	ContainerID   string `json:"container_id" bson:"container_id"`
+	ContainerName string `json:"container_name" bson:"container_name"`
+	PID           int    `json:"pid" bson:"pid"`
+	UID           string `json:"uid" bson:"uid"`
+	Cgroup        string `json:"cgroup" bson:"cgroup"`
 }
 
 

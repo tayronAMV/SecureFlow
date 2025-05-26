@@ -3,64 +3,51 @@ package main
 import (
 	"agent/internal"
 	"agent/pkg/kube"
+	"agent/pkg/logs"
+	"agent/pkg/utils"
+
 	// "agent/pkg/logs"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
 	// "agent/pkg/utils"
-	"time"
-
-	
+	// "time"
 )
 
 func agent_Start(){
-	
-	
-	_, err := kube.FetchContainerMappings()
-	if err != nil {
-		log.Printf("❌ Failed to fetch container mappings: %v", err)
-		return
-	}
-	internal.StartSyscallReader()	
-	// internal.StartResourceCollector(mappings)
-	// logs.RabbitMQ_producer_Start()
-	// defer logs.RabbitMQ_producer_Close()
-	// internal.StartTrraficCollector()
-	for {
-
-
-		// need to make this councurrent
-
-		// 
-	
-		
-
-		time.Sleep(120 * time.Second)
-		// utils.Send_to_Server_Reset()
-
-		
-
-
-
-
-
-	}
+	log.Println("🚀 Starting SecureFlow agent...")
+	logCh := make(chan logs.Producer_msg,100)
+	NetworkCh := make(chan []logs.FlowRule,20)
+	SyscallCh := make(chan []logs.SyscallEventRule,100)
+	MemoryCh := make(chan []logs.MemoryUsageRule,100)
+	DiskcCh := make(chan []logs.DiskIOUsageRule,100)
+	CPUCh := make(chan []logs.CPUUsageRule,100)
+	logs.StartProducer(logCh)
+	logs.RabbitMQ_Consumer_Start(NetworkCh , SyscallCh , MemoryCh, DiskcCh , CPUCh )
+	go kube.MappingTracker() 
+	go internal.StartSyscallReader(logCh , SyscallCh) 
+	go internal.StartResourceCollector(logCh , MemoryCh ,DiskcCh , CPUCh)  
+	go internal.StartTrraficCollector(logCh , NetworkCh) 
+	go utils.Anomaly_log_generator(logCh)
 }
 
 
-
-
 func main() {
-	log.Println("🚀 Starting SecureFlow agent...")
+	
 	agent_Start()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
+	// sigs := make(chan os.Signal, 1)
+	// signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	// <-sigs
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	<-stop // wait for termination signal
+	
+	log.Println("🛑 Shutting down SecureFlow agent...")
 	
 	
-	log.Println("🛑 Agent stopped.")
+	// log.Println("🛑 Agent stopped.")
 }

@@ -11,13 +11,110 @@
 // TC return codes
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
-#define TC_ACT_PIPE 3
-#define TC_ACT_STOLEN 4
+
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
     __uint(max_entries, 1 << 24);
 } events SEC(".maps");
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 128);
+    __type(key, __u32);
+    __type(value, struct flow_rule_t);
+} flow_rules SEC(".maps");
+
+
+
+
+static __always_inline int match_rule(struct flow_event_t *event) {
+    struct flow_rule_t *rule;
+    for (int i = 0; i < 10; i++) {
+        int count = 0;
+        rule = bpf_map_lookup_elem(&flow_rules, &(int){i});
+        if (!rule)
+            continue;
+
+        if (rule->action == 0)
+            continue;
+
+        if (rule->src_ip == event->src_ip) {
+            bpf_printk("src_ip match: %x", event->src_ip);
+            count++;
+        }
+
+        if (rule->dst_ip == event->dst_ip) {
+            bpf_printk("dst_ip match: %x", event->dst_ip);
+            count++;
+        }
+
+        if (rule->protocol == event->protocol) {
+            bpf_printk("protocol match: %d", event->protocol);
+            count++;
+        }
+
+        if (rule->src_port && rule->src_port == event->src_port) {
+            bpf_printk("src_port match: %d", event->src_port);
+            count++;
+        }
+
+        if (rule->dst_port && rule->dst_port == event->dst_port) {
+            bpf_printk("dst_port match: %d", event->dst_port);
+            count++;
+        }
+
+        
+        if (rule->direction == event->direction) {
+            bpf_printk("direction match: %d , %d ", event->direction ,rule->direction );
+            count++;
+        }
+
+        if (rule->dpi_protocol && rule->dpi_protocol == event->dpi_protocol) {
+            bpf_printk("dpi_protocol match: %d", event->dpi_protocol);
+            count++;
+        }
+
+        if (rule->icmp_type == event->icmp_type) {
+            bpf_printk("icmp_type match: %d", event->icmp_type);
+            count++;
+        }
+
+        if (rule->query_type == event->query_type) {
+            bpf_printk("query_type match: %d", event->query_type);
+            count++;
+        }
+
+        if (rule->method[0] != 0 &&
+            __builtin_memcmp(rule->method, event->method, 8) == 0) {
+            bpf_printk("method match: %x", event->method[0]); // print first byte
+            count++;
+        }
+
+        if (rule->path[0] != 0 &&
+            __builtin_memcmp(rule->path, event->path, 64) == 0) {
+            bpf_printk("path match: %x", event->path[0]); // print first byte
+            count++;
+        }
+
+        if (rule->query_name[0] != 0 &&
+            __builtin_memcmp(rule->query_name, event->query_name, 64) == 0) {
+            bpf_printk("query_name match: %x", event->query_name[0]); // print first byte
+            count++;
+        }
+
+        bpf_printk("total matches: %d of required %d", count, rule->action);
+
+        if (count == rule->action) {
+            bpf_printk("DROP");
+            return 1;
+        }
+    }
+
+    return 0; // Allow
+}
+
 
 static __always_inline int check_bounds(void *ptr, void *data_end, __u64 size) {
     return ((char *)ptr + size) > (char *)data_end;
@@ -44,7 +141,7 @@ static __always_inline void parse_http(struct __sk_buff *ctx, void *data, void *
         if (buf[i] == ' ') break;
         evt->method[i] = buf[i];
     }
-
+    
     // Find path start (after first space)
     int p_off = 0;
     for (int i = 0; i < 256 && i < len; i++) {
@@ -56,7 +153,7 @@ static __always_inline void parse_http(struct __sk_buff *ctx, void *data, void *
         if (buf[p_off + i] == ' ') break;
         evt->path[i] = buf[p_off + i];
     }
-
+    
     evt->dpi_protocol = 1; // HTTP
 }
 
@@ -68,6 +165,7 @@ static __always_inline void parse_dns(struct __sk_buff *ctx, void *data, void *p
 
     char name[64] = {};
     int len = load_payload(ctx, data, q, data_end, name, sizeof(name));
+    
 
     // Copy DNS query name
     for (int i = 0; i < 64 && i < len; i++) {
@@ -92,14 +190,21 @@ static __always_inline void parse_icmp(struct icmphdr *icmp, struct flow_event_t
 }
 
 static __always_inline int emit_and_return(struct flow_event_t *evt) {
-    bpf_printk("TC: Submitting packet event, proto=%d\n", evt->protocol);
+    // bpf_printk("TC: Submitting packet event, proto=%d\n", evt->protocol);
+
+    if (match_rule(evt)) {
+        bpf_printk("TC: Matched rule for drop, discarding event and packet.\n");
+        bpf_ringbuf_discard(evt, 0); 
+        return TC_ACT_SHOT;
+    }
+
     bpf_ringbuf_submit(evt, 0);
     return TC_ACT_OK;
 }
 
 static __always_inline int discard_and_return(struct flow_event_t *evt) {
     bpf_printk("TC: Submitting error event, proto=%d\n", evt->protocol);
-    bpf_ringbuf_submit(evt, 0);
+    bpf_ringbuf_discard(evt, 0);
     return TC_ACT_OK;
 }
 
@@ -137,7 +242,7 @@ static __always_inline int parse_packet(struct __sk_buff *ctx, __u8 direction) {
     evt->timestamp = bpf_ktime_get_ns();
     evt->payload_len = ctx->len;
     evt->direction = direction;
-    evt->Pid = 0;
+    evt->ifindex = ctx->ifindex;
     evt->src_ip = ip->saddr;
     evt->dst_ip = ip->daddr;
     evt->protocol = ip->protocol;

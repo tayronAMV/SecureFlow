@@ -12,11 +12,14 @@ import (
 	"sync"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"agent/pkg/kube"
+	
 	"log"
 	"net"
+	"agent/pkg/kube"
 	
 )
+
+var IfIndex_Mapper = make(map[int]kube.ContainerMapping)
 
 func GetPeerIfindexFromContainerEth0(pid int) (int, error) {
 	cmd := exec.Command("nsenter", "-t", fmt.Sprint(pid), "-n", "ip", "link", "show", "eth0")
@@ -130,14 +133,12 @@ func (lt *LinkTracker) CloseAll() {
 func attachToContainers(objs *struct {
 	TcIngress *ebpf.Program `ebpf:"tc_ingress"`
 	TcEgress  *ebpf.Program `ebpf:"tc_egress"`
+	FlowRules *ebpf.Map `ebpf:"flow_rules"` 
 	Events    *ebpf.Map     `ebpf:"events"`
 }, tracker *LinkTracker) error {
 	
-	containers, err := kube.FetchContainerMappings()
-	if err != nil {
-		return fmt.Errorf("failed to fetch container mappings: %v", err)
-	}
-
+	containers:= kube.GetCurrentMapping()
+	
 	if len(containers) == 0 {
 		log.Println("⚠️  No containers found")
 		return nil
@@ -194,6 +195,10 @@ func attachToContainers(objs *struct {
 			log.Printf("❌ Failed to attach TCX egress to %s (index: %d): %v", ifaceName, ifindex, err)
 			ingressLink.Close() // Clean up ingress link
 			continue
+		}
+
+		if _,ok := IfIndex_Mapper[ifindex] ; !ok{
+			IfIndex_Mapper[ifindex] = container
 		}
 
 		// Track both links

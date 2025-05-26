@@ -7,17 +7,19 @@ import (
 
 	"agent/pkg/kube"
 	"agent/pkg/logs"
-	"fmt"
+	"agent/pkg/utils"
+
 	"os"
 	"os/signal"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
-)
+)	
+	
 
 
-func StartSyscallReader() {
+func StartSyscallReader(logCh chan logs.Producer_msg ,Sysch chan , ) {
 	spec, err := ebpf.LoadCollectionSpec("bpf/syscalls.bpf.o")
 	if err != nil {
 		log.Fatalf("❌ Failed to load BPF spec: %v", err)
@@ -87,30 +89,38 @@ func StartSyscallReader() {
 				continue
 			}
 			
-			if info , ok := kube.Cgroup_mapping[event.Cgid] ; ok {
-				fmt.Printf("im gonna cum , this is the syscall %s \n and this is from conatiner %s\n",event.String(),info.PodName)
-			}else{
-				continue
+			container , ok := kube.Get_Cgroup_mapping(event.Cgid)
+
+			if !ok{
+				continue 
 			}
-
-			// uid := utils.PidToUid(int(event.Pid))
-			// event.UID = uid
-
-			// if obj, ok := utils.Container_uid_map[uid]; ok {
-			// 	obj.Syscall++
-			// } else {
-			// 	utils.Container_uid_map[uid] = &logs.Anomaly_log{Syscall: 1}
-			// }
-
-			
+			utils.Update_uid_Map(container.UID , container)
+			utils.Update_syscall_Tracker(container.UID)
+			logCh <- logs.Producer_msg{
+				Body: logs.Encode_string(event.String()),
+				Id: 1,
+			}			
 		}
 	}()
 
-	<-stop
-	log.Println("👋 Stopping...")
 
-	for _, l := range links {
-		_ = l.Close()
+	for {
+		select{
+		case <-stop:
+			log.Println("👋 Stopping...")
+			for _, l := range links {
+				_ = l.Close()
+			}
+			return 
+			
+		}
+
 	}
+
+	
+	
+
+	
 }
+
 
