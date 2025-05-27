@@ -24,10 +24,11 @@ int log_execve(struct trace_event_raw_sys_enter *ctx)
     event.pid = id >> 32;
     event.cgid = bpf_get_current_cgroup_id();
     event.type = EVENT_EXECVE;
-    bpf_get_current_comm(&event.comm, sizeof(event.comm));
+    bpf_get_current_comm(&event.comm, sizeof(event.comm)); // get the proccess that executed this 
     
     const char *user_filename = (const char *)ctx->args[0];  // arg0 = filename
-    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename);
+    bpf_probe_read_user_str(event.filename, sizeof(event.filename), user_filename); // reads from pointer (that reference user space ) , for example pointer to "bin/bash"
+
     
     bpf_ringbuf_output(&syscall_events, &event, sizeof(event), 0);
     return 0;
