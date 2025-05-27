@@ -14,7 +14,7 @@ func UIInit() {
 	app := fiber.New()
 
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
-		log.Println("✅ UI connected via WebSocket")
+		log.Println(" UI connected via WebSocket")
 		conn = c
 		defer ConnectionStop()
 
@@ -26,29 +26,29 @@ func UIInit() {
 		}
 	}))
 
-	log.Println("🚀 WebSocket server running at ws://localhost:8080/ws")
+	log.Println(" WebSocket server running at ws://localhost:8080/ws")
 	log.Fatal(app.Listen(":8080"))
 }
 
 func SendLog(entry models.Consumer_msg) {
 	if conn == nil {
-		log.Println("⚠️ No active WebSocket connection")
+		log.Println(" No active WebSocket connection")
 		return
 	}
 
 	data, err := json.Marshal(entry)
 	if err != nil {
-		log.Println("❌ Failed to marshal log:", err)
+		log.Println(" Failed to marshal log:", err)
 		return
 	}
 
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		log.Println("❌ Failed to send WebSocket message:", err)
+		log.Println(" Failed to send WebSocket message:", err)
 	}
 }
 
 func ConnectionStop() {
-	log.Println("🔌 UI disconnected")
+	log.Println(" UI disconnected")
 	if conn != nil {
 		conn.Close()
 		conn = nil
