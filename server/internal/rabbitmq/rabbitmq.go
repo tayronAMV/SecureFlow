@@ -63,7 +63,7 @@ func Connect_to_agent() error {
 			var generic_struct models.Consumer_msg
 			err := json.Unmarshal(msg.Body,&generic_struct)
 			if err != nil {
-				log.Printf("⚠️ Invalid JSON: %v", err)
+				log.Printf(" Invalid JSON: %v", err)
 				continue
 			}
 
@@ -72,16 +72,16 @@ func Connect_to_agent() error {
 				var s models.Consumer_activity_log
 				err := json.Unmarshal(msg.Body , &s)
 				if err != nil {					
-					log.Printf("⚠️ Invalid JSON: %v", err)
+					log.Printf(" Invalid JSON: %v", err)
 					continue
 				}
 				db.InsertLog(s.Body)
 			
 			case 2 :
 				var s models.Consumer_Anomaly_log
-				err := json.Unmarshal(msg.Body , &s)
+				err := json.Unmarshal(msg.Body , &0s)
 				if err != nil {					
-					log.Printf("⚠️ Invalid JSON: %v", err)
+					log.Printf(" Invalid JSON: %v", err)
 					continue
 				}
 				db.InsertAnomaly_Log(&s.Body)
