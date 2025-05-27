@@ -122,11 +122,11 @@ static __always_inline int check_bounds(void *ptr, void *data_end, __u64 size) {
 
 static __always_inline int load_payload(struct __sk_buff *ctx, void *data, void *payload,
                                         void *data_end, char *buf, int max_len) {
-    int avail = (int)((long)data_end - (long)payload);
-    int to_copy = avail < max_len ? avail : max_len;
+    int avail = (int)((long)data_end - (long)payload); // This computes how many bytes are safe to read
+    int to_copy = avail < max_len ? avail : max_len; // Ensures we don’t read past data_end ,to_copy will be the actual length we’re copying
     if (to_copy <= 0)
         return 0;
-    if (bpf_skb_load_bytes(ctx, (long)payload - (long)data, buf, to_copy) < 0)
+    if (bpf_skb_load_bytes(ctx, (long)payload - (long)data, buf, to_copy) < 0)// bpf_skb_load_bytes copies data from the skb (ctx) at offset (payload - data) into buf.
         return 0;
     return to_copy;
 }
@@ -174,15 +174,21 @@ static __always_inline void parse_dns(struct __sk_buff *ctx, void *data, void *p
         if (c == 0) { len = i + 1; break; }
     }
 
-    // Extract query type if available
+    // Extract query type if available , like A for ipv4 , AAAA for ipv6 
     if ((void *)q + len + 2 <= data_end) {
         __u16 qtype = 0;
-        bpf_skb_load_bytes(ctx, (long)((void *)q - data) + len, &qtype, sizeof(qtype));
+        bpf_skb_load_bytes(ctx, (long)((void *)q - data) + len, &qtype, sizeof(qtype)); 
         evt->query_type = bpf_ntohs(qtype);
     }
 
     evt->dpi_protocol = 2; // DNS
 }
+
+// ICMP Types:
+// 0  - Echo Reply (ping reply)
+// 3  - Destination Unreachable
+// 8  - Echo Request (ping)
+// 11 - Time Exceeded
 
 static __always_inline void parse_icmp(struct icmphdr *icmp, struct flow_event_t *evt) {
     evt->icmp_type = icmp->type;
