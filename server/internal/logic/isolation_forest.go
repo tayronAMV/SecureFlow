@@ -29,12 +29,6 @@ func RandFloatN(n float64) float64 {
 	return rand.Float64() * n
 }
 
-func max_int(a int , b int ) int {
-	if a < b {
-		return b
-	}
-	return a 
-}
 
 
 // step 1 : purpose - just to remove dups for the algo noty getting bloated with the same data
@@ -205,7 +199,7 @@ func BuildTree(arr []*models.AnomalyLog, depth int) *TreeNode {
 		if val < threshold {
 			left = append(left, s)
 		} else {
-			right = append(right, s)
+			right         = append(right, s)
 		}
 	}
 

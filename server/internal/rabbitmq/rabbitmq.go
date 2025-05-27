@@ -22,12 +22,12 @@ func Connect_to_agent() error {
 
 	agentConn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf(" Failed to connect to RabbitMQ: %v", err)
 	}
 
 	agentChannel, err = agentConn.Channel()
 	if err != nil {
-		log.Fatalf("❌ Failed to open a channel: %v", err)
+		log.Fatalf(" Failed to open a channel: %v", err)
 	}
 
 	q, err := agentChannel.QueueDeclare(
@@ -39,7 +39,7 @@ func Connect_to_agent() error {
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to declare queue: %v", err)
+		log.Fatalf(" Failed to declare queue: %v", err)
 	}
 
 	msgs, err := agentChannel.Consume(
@@ -52,10 +52,10 @@ func Connect_to_agent() error {
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to register consumer: %v", err)
+		log.Fatalf(" Failed to register consumer: %v", err)
 	}
 
-	log.Println("✅ Connected. Waiting for anomaly logs...")
+	log.Println(" Connected. Waiting for anomaly logs...")
 
 	//TODO , change for recieving any log from agent , types 0 - 5 
 	go func() {
@@ -100,5 +100,5 @@ func CloseAgentConnection() {
 	if agentConn != nil {
 		agentConn.Close()
 	}
-	log.Println("🔌 RabbitMQ agent connection closed.")
+	log.Println(" RabbitMQ agent connection closed.")
 }

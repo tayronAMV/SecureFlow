@@ -215,7 +215,7 @@ func StartResourceCollector(logCh chan logs.Producer_msg) {
 	mappingCh := make(chan struct{}, 1) // Buffered so sender never blocks
 
 	go func() {
-		fmt.Println("📊 Starting resource collector (CPU, Memory, Disk)...")
+		fmt.Println(" Starting resource collector (CPU, Memory, Disk)...")
 
 		mappings := kube.GetCurrentMapping()
 		ticker := time.NewTicker(1 * time.Second)
@@ -229,7 +229,7 @@ func StartResourceCollector(logCh chan logs.Producer_msg) {
 			case <-ticker.C:
 				for _, m := range mappings {
 					if cpu, err := CollectAndUpdateCPU(m, m.PID); err != nil {
-						fmt.Printf("⚠️ CPU update failed for %s: %v\n", m.ContainerID, err)
+						fmt.Printf(" CPU update failed for %s: %v\n", m.ContainerID, err)
 					} else {
 						logCh <- logs.Producer_msg{
 							Body: logs.Encode_string(cpu),
@@ -238,7 +238,7 @@ func StartResourceCollector(logCh chan logs.Producer_msg) {
 					}
 
 					if mem, err := CollectAndUpdateMemory(m, m.PID); err != nil {
-						fmt.Printf("⚠️ Memory update failed for %s: %v\n", m.ContainerID, err)
+						fmt.Printf(" Memory update failed for %s: %v\n", m.ContainerID, err)
 					} else {
 						logCh <- logs.Producer_msg{
 							Body: logs.Encode_string(mem),
@@ -247,7 +247,7 @@ func StartResourceCollector(logCh chan logs.Producer_msg) {
 					}
 
 					if disk, err := CollectAndUpdateDisk(m, m.PID); err != nil {
-						fmt.Printf("⚠️ Disk update failed for %s: %v\n", m.ContainerID, err)
+						fmt.Printf(" Disk update failed for %s: %v\n", m.ContainerID, err)
 					} else {
 						logCh <- logs.Producer_msg{
 							Body: logs.Encode_string(disk),
@@ -278,7 +278,7 @@ func StartResourceCollector(logCh chan logs.Producer_msg) {
 func CollectAndUpdateCPU(container kube.ContainerMapping , pid int) (string,error){
 	cur, err := GetCPUUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ CPU collect error for %s: %v", container.ContainerID, err)
+		fmt.Printf(" CPU collect error for %s: %v", container.ContainerID, err)
 		return "",err
 	}
 	
@@ -303,7 +303,7 @@ func CollectAndUpdateCPU(container kube.ContainerMapping , pid int) (string,erro
 func CollectAndUpdateDisk(container kube.ContainerMapping, pid int) (string,error) {
 	cur, err := GetDiskIOUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ Disk I/O collect error for %s: %v\n", container.ContainerID, err)
+		fmt.Printf(" Disk I/O collect error for %s: %v\n", container.ContainerID, err)
 		return "" , err
 	}
 	
@@ -325,7 +325,7 @@ func CollectAndUpdateDisk(container kube.ContainerMapping, pid int) (string,erro
 func CollectAndUpdateMemory(container kube.ContainerMapping, pid int) (string,error){
 	cur, err := GetMemoryUsage(container.ContainerID, pid)
 	if err != nil {
-		fmt.Printf("❌ Memory collect error for %s: %v\n", container.ContainerID, err)
+		fmt.Printf(" Memory collect error for %s: %v\n", container.ContainerID, err)
 		return "",err
 	}
 	utils.Update_uid_Map(container.UID , container)

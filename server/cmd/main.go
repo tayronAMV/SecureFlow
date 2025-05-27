@@ -21,14 +21,14 @@ func main(){
 	kube_client , err:= handlers.GetKubernetesClient()
 
 	if err != nil{
-		fmt.Println("nooooo la policiaaaa nooooooo , " , err)
+		fmt.Println( err)
 		return
 	}
 
 	logs ,err := handlers.FetchPodLogs(kube_client , namespace , podname , containerName , t)
 
 	if err != nil{
-		fmt.Println(" oh no 2lv policia , " ,err)
+		fmt.Println(" oh no 2lv  , " ,err)
 		return
 	}
 	
@@ -41,10 +41,7 @@ func main(){
 
 	res := logic.RunApriori(items )
 
-	for _,arr := range res{
-		fmt.Println("ahhhhh " , arr)
-	}
-
+	
 
 	
 	

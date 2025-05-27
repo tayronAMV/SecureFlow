@@ -26,7 +26,7 @@ func StartTrraficCollector(logCh chan logs.Producer_msg , NetworkCh chan []logs.
 	// Load eBPF program
 	spec, err := ebpf.LoadCollectionSpec("bpf/traffic.bpf.o")
 	if err != nil {
-		log.Fatalf("❌ LoadCollectionSpec: %v", err)
+		log.Fatalf(" LoadCollectionSpec: %v", err)
 	}
 	
 	objs := struct {
@@ -37,7 +37,7 @@ func StartTrraficCollector(logCh chan logs.Producer_msg , NetworkCh chan []logs.
 	}{}
 	
 	if err := spec.LoadAndAssign(&objs, nil); err != nil {
-		log.Fatalf("❌ LoadAndAssign: %v", err)
+		log.Fatalf(" LoadAndAssign: %v", err)
 	}
 	defer objs.TcIngress.Close()
 	defer objs.TcEgress.Close()
@@ -56,11 +56,11 @@ func StartTrraficCollector(logCh chan logs.Producer_msg , NetworkCh chan []logs.
 	// Setup ringbuf reader
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
-		log.Fatalf("❌ Failed to open ringbuf: %v", err)
+		log.Fatalf(" Failed to open ringbuf: %v", err)
 	}
 	defer rd.Close()
 
-	log.Println("📦 Listening to ring buffer...")
+	log.Println(" Listening to ring buffer...")
 
 	// Setup signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,14 +88,14 @@ func StartTrraficCollector(logCh chan logs.Producer_msg , NetworkCh chan []logs.
 					if ctx.Err() != nil {
 						return
 					}
-					log.Printf("❌ ringbuf read error: %v", err)
+					log.Printf(" ringbuf read error: %v", err)
 					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 
 				var event logs.FlowEvent
 				if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-					log.Printf("❌ Failed to parse event: %v", err)
+					log.Printf(" Failed to parse event: %v", err)
 					continue
 				}
 				container := IfIndex_Mapper[int(event.IfIndex)]
@@ -149,7 +149,7 @@ cleanup:
 	tracker.CloseAll()
 	rd.Close()
 	
-	log.Println("✅ Cleanup complete")
+	log.Println(" Cleanup complete")
 }
 
 
@@ -162,9 +162,9 @@ func LoadFlowRules(rules []logs.FlowRule, bpfMap *ebpf.Map) error {
     // Debug: Check map info
     info, err := bpfMap.Info()
     if err != nil {
-        log.Printf("❌ Failed to get map info: %v", err)
+        log.Printf(" Failed to get map info: %v", err)
     } else {
-        log.Printf("🔍 Map info - KeySize: %d, ValueSize: %d, MaxEntries: %d", 
+        log.Printf(" Map info - KeySize: %d, ValueSize: %d, MaxEntries: %d", 
             info.KeySize, info.ValueSize, info.MaxEntries)
     }
 
@@ -177,21 +177,21 @@ func LoadFlowRules(rules []logs.FlowRule, bpfMap *ebpf.Map) error {
         log.Printf("🔍 Inserting rule %d: %+v", i, rule)
         
         if err := bpfMap.Put(idx, rule); err != nil {
-            log.Printf("❌ Failed to insert rule %d: %v", i, err)
-            log.Printf("❌ Rule data: %+v", rule)
+            log.Printf(" Failed to insert rule %d: %v", i, err)
+            log.Printf(" Rule data: %+v", rule)
             return fmt.Errorf("failed to insert rule %d: %w", i, err)
         }
         
         // Verify the rule was actually inserted
         var retrieved logs.FlowRule
         if err := bpfMap.Lookup(idx, &retrieved); err != nil {
-            log.Printf("❌ Failed to verify rule %d: %v", i, err)
+            log.Printf(" Failed to verify rule %d: %v", i, err)
         } else {
-            log.Printf("✅ Verified rule %d: %+v", i, retrieved)
+            log.Printf(" Verified rule %d: %+v", i, retrieved)
         }
     }
 
-    log.Printf("✅ Successfully loaded %d flow rules into BPF map", len(rules))
+    log.Printf(" Successfully loaded %d flow rules into BPF map", len(rules))
     return nil
 }
 

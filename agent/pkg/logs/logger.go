@@ -14,7 +14,7 @@ import (
 func Encode_string(s string)[]byte{
 	body, err := json.Marshal(s)
 	if err != nil {
-		log.Printf("❌ JSON marshal failed: %v", err)
+		log.Printf("JSON marshal failed: %v", err)
 		return nil
 	}
 
@@ -26,7 +26,7 @@ func Decode_string(body []byte) string {
 	var s string
 	err := json.Unmarshal(body, &s)
 	if err != nil {
-		log.Printf("❌ JSON unmarshal failed: %v", err)
+		log.Printf(" JSON unmarshal failed: %v", err)
 		return ""
 	}
 	return s
@@ -35,7 +35,7 @@ func Decode_string(body []byte) string {
 func (a Anomaly_log) Encode()[]byte{
 	body, err := json.Marshal(a)
 	if err != nil {
-		log.Printf("❌ JSON marshal failed: %v", err)
+		log.Printf(" JSON marshal failed: %v", err)
 		return nil
 	}
 
@@ -46,7 +46,7 @@ func DecodeAnomalyLog(data []byte) (Anomaly_log) {
 	var a Anomaly_log
 	err := json.Unmarshal(data, &a)
 	if err != nil {
-		log.Printf("❌ JSON unmarshal failed: %v", err)
+		log.Printf(" JSON unmarshal failed: %v", err)
 		return Anomaly_log{}
 	}
 	return a
@@ -213,7 +213,7 @@ func nullTerminatedString(b []byte) string {
 
 func (a Anomaly_log) String() string {
 	return fmt.Sprintf(
-		"📊 AnomalyLog [Pod=%s] CPU=%.2f, Memory=%.2f, DiskIO=%.2f, Network=%.2f, Syscalls=%.2f @%s",
+		" AnomalyLog [Pod=%s] CPU=%.2f, Memory=%.2f, DiskIO=%.2f, Network=%.2f, Syscalls=%.2f @%s",
 		a.Container.PodName,
 		a.CPU,
 		a.Memory,
@@ -229,7 +229,7 @@ func UnmarshalFlowRules(data []byte) ([]FlowRule) {
 	var rules []FlowRule
 	err := json.Unmarshal(data, &rules)
 	if err != nil {
-		log.Printf("❌ Failed to unmarshal rules: %v", err)
+		log.Printf(" Failed to unmarshal rules: %v", err)
 		return nil
 	} 
 	return rules 

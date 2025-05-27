@@ -119,10 +119,10 @@ func (lt *LinkTracker) CloseAll() {
 	for ifindex, links := range lt.attachedLinks {
 		for i, l := range links {
 			if err := l.Close(); err != nil {
-				log.Printf("❌ Failed to close link %d for ifindex %d: %v", i, ifindex, err)
+				log.Printf(" Failed to close link %d for ifindex %d: %v", i, ifindex, err)
 			}
 		}
-		log.Printf("✅ Closed links for interface: %s", lt.attachedIfaces[ifindex])
+		log.Printf(" Closed links for interface: %s", lt.attachedIfaces[ifindex])
 	}
 	
 	// Clear the maps
@@ -150,27 +150,27 @@ func attachToContainers(objs *struct {
 		// Get the peer veth interface index from container's eth0
 		ifindex, err := GetPeerIfindexFromContainerEth0(container.PID)
 		if err != nil {
-			log.Printf("❌ Failed to get peer ifindex for container PID %d: %v", container.PID, err)
+			log.Printf(" Failed to get peer ifindex for container PID %d: %v", container.PID, err)
 			continue
 		}
 
 		// Skip if already attached
 		if tracker.IsAttached(ifindex) {
-			log.Printf("⏭️  Interface with index %d already attached, skipping", ifindex)
+			log.Printf(" Interface with index %d already attached, skipping", ifindex)
 			continue
 		}
 
 		// Find the host veth interface name
 		ifaceName, err := FindHostVethByIndex(ifindex)
 		if err != nil {
-			log.Printf("❌ Failed to find host veth by index %d: %v", ifindex, err)
+			log.Printf(" Failed to find host veth by index %d: %v", ifindex, err)
 			continue
 		}
 
 		// Get interface by name
 		iface, err := net.InterfaceByName(ifaceName)
 		if err != nil {
-			log.Printf("❌ Failed to get interface %s: %v", ifaceName, err)
+			log.Printf(" Failed to get interface %s: %v", ifaceName, err)
 			continue
 		}
 
@@ -181,7 +181,7 @@ func attachToContainers(objs *struct {
 			Attach:    ebpf.AttachTCXIngress,
 		})
 		if err != nil {
-			log.Printf("❌ Failed to attach TCX ingress to %s (index: %d): %v", ifaceName, ifindex, err)
+			log.Printf(" Failed to attach TCX ingress to %s (index: %d): %v", ifaceName, ifindex, err)
 			continue
 		}
 
@@ -192,7 +192,7 @@ func attachToContainers(objs *struct {
 			Attach:    ebpf.AttachTCXEgress,
 		})
 		if err != nil {
-			log.Printf("❌ Failed to attach TCX egress to %s (index: %d): %v", ifaceName, ifindex, err)
+			log.Printf(" Failed to attach TCX egress to %s (index: %d): %v", ifaceName, ifindex, err)
 			ingressLink.Close() // Clean up ingress link
 			continue
 		}
@@ -203,15 +203,15 @@ func attachToContainers(objs *struct {
 
 		// Track both links
 		tracker.AddLinks(ifindex, ifaceName, ingressLink, egressLink)
-		log.Printf("✅ Attached ingress+egress to interface: %s (index: %d) for container PID: %d", 
+		log.Printf("Attached ingress+egress to interface: %s (index: %d) for container PID: %d", 
 			ifaceName, ifindex, container.PID)
 	}
 
 	attachedIfaces := tracker.GetAttachedInterfaces()
 	if len(attachedIfaces) > 0 {
-		log.Printf("🎯 Successfully attached to %d interfaces: %v", len(attachedIfaces), attachedIfaces)
+		log.Printf(" Successfully attached to %d interfaces: %v", len(attachedIfaces), attachedIfaces)
 	} else {
-		log.Println("⚠️  No interfaces were successfully attached")
+		log.Println(" No interfaces were successfully attached")
 	}
 
 	return nil

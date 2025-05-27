@@ -32,12 +32,12 @@ func RabbitMQ_producer_Start() {
 
 	ProducerConn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf(" Failed to connect to RabbitMQ: %v", err)
 	}
 
 	ProducerChannel, err = ProducerConn.Channel()
 	if err != nil {
-		log.Fatalf("❌ Failed to open channel: %v", err)
+		log.Fatalf(" Failed to open channel: %v", err)
 	}
 
 	ProducerQueue, err = ProducerChannel.QueueDeclare(
@@ -49,10 +49,10 @@ func RabbitMQ_producer_Start() {
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to declare queue: %v", err)
+		log.Fatalf(" Failed to declare queue: %v", err)
 	}
 
-	log.Println("✅ RabbitMQ Producer ready")
+	log.Println(" RabbitMQ Producer ready")
 }
 
 
@@ -70,7 +70,7 @@ func Producer(logCh <-chan Producer_msg) {
 
 		case msg, ok := <-logCh:
 			if !ok {
-				log.Println("🚪 logCh closed, shutting down producer")
+				log.Println("logCh closed, shutting down producer")
 				RabbitMQ_producer_Close()
 				return
 			}
@@ -132,12 +132,12 @@ func RabbitMQ_Consumer_Start(
 	
 	ConsumerConn, err = amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf(" Failed to connect to RabbitMQ: %v", err)
 	}
 
 	ConsumerChannel, err = ConsumerConn.Channel()
 	if err != nil {
-		log.Fatalf("❌ Failed to open a channel: %v", err)
+		log.Fatalf(" Failed to open a channel: %v", err)
 	}
 
 	q, err := ConsumerChannel.QueueDeclare(
@@ -149,7 +149,7 @@ func RabbitMQ_Consumer_Start(
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to declare queue: %v", err)
+		log.Fatalf(" Failed to declare queue: %v", err)
 	}
 
 	Consumer_msgs, err := ConsumerChannel.Consume(
@@ -162,7 +162,7 @@ func RabbitMQ_Consumer_Start(
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("❌ Failed to register consumer: %v", err)
+		log.Fatalf(" Failed to register consumer: %v", err)
 	}
 
 
@@ -178,7 +178,7 @@ func RabbitMQ_Consumer_Start(
 				for msg := range Consumer_msgs{
 					val, ok := d.Headers["arg"]
 					if !ok {
-						log.Println("⚠️ 'arg' header missing")
+						log.Println(" 'arg' header missing")
 						continue
 					}
 
@@ -191,7 +191,7 @@ func RabbitMQ_Consumer_Start(
 					case int:
 						arg = v
 					default:
-						log.Printf("❌ Unsupported 'arg' type: %T\n", v)
+						log.Printf(" Unsupported 'arg' type: %T\n", v)
 						continue
 					}
 

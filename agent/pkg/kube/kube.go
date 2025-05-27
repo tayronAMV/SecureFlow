@@ -46,23 +46,23 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 	
 	config, err := clientcmd.BuildConfigFromFlags("", "/etc/rancher/k3s/k3s.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("❌ Cannot load kubeconfig: %w", err)
+		return nil, fmt.Errorf("Cannot load kubeconfig: %w", err)
 	}
 
-	log.Println("🔌 Creating Kubernetes clientset...")
+	log.Println(" Creating Kubernetes clientset...")
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Cannot create clientset: %w", err)
+		return nil, fmt.Errorf(" Cannot create clientset: %w", err)
 	}
 
-	log.Println("📦 Fetching all pods from cluster...")
+	log.Println(" Fetching all pods from cluster...")
 	pods, err := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to list pods: %w", err)
+		return nil, fmt.Errorf(" Failed to list pods: %w", err)
 	}
 
 	var results []ContainerMapping
-	log.Printf("📦 Found %d pods, iterating...",len(pods.Items))
+	log.Printf(" Found %d pods, iterating...",len(pods.Items))
 	for _, pod := range pods.Items {
 		if pod.Namespace == "kube-system" || pod.Namespace == "kube-public" || pod.Namespace == "kube-node-lease" {
 			continue
@@ -70,14 +70,14 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 		for _, status := range pod.Status.ContainerStatuses {
 			cid := strings.TrimPrefix(status.ContainerID, "containerd://")
 			if cid == "" {
-				log.Printf("⚠️ Empty ContainerID for container %s in pod %s/%s", status.Name, pod.Namespace, pod.Name)
+				log.Printf(" Empty ContainerID for container %s in pod %s/%s", status.Name, pod.Namespace, pod.Name)
 				continue
 			}	
 
-			log.Printf("🔍 Resolving PID for container %s (%s/%s)...", status.Name, pod.Namespace, pod.Name)
+			log.Printf(" Resolving PID for container %s (%s/%s)...", status.Name, pod.Namespace, pod.Name)
 			pid, err := getPidFromCrictl(cid)
 			if err != nil {
-				log.Printf("⚠️ Failed to get PID for container %s (%s): %v", cid, status.Name, err)
+				log.Printf(" Failed to get PID for container %s (%s): %v", cid, status.Name, err)
 				continue
 			}
 
@@ -90,7 +90,7 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 				UID:           string(pod.UID) ,
 			}
 			results = append(results,container)
-			log.Printf("✅ Added mapping: %s/%s → PID %d", pod.Namespace, pod.Name, pid)
+			log.Printf(" Added mapping: %s/%s → PID %d", pod.Namespace, pod.Name, pid)
 
 
 			cgroupID , err:= GetContainerCgroupID(pid)
@@ -108,7 +108,7 @@ func FetchContainerMappings() ([]ContainerMapping, error) {
 		}
 	}
 
-	log.Printf("✅ Total container mappings collected: %d", len(results))
+	log.Printf("Total container mappings collected: %d", len(results))
 	return results, nil
 }
 
@@ -195,7 +195,7 @@ func MappingTracker() {
         case <-rescanTicker.C:
             updated_map, err := FetchContainerMappings()
             if err != nil {
-                fmt.Println("❌ Couldn't get containers:", err)
+                fmt.Println("Couldn't get containers:", err)
                 continue
             }
 

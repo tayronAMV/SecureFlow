@@ -16,7 +16,7 @@ import (
 )
 
 func agent_Start(){
-	log.Println("🚀 Starting SecureFlow agent...")
+	log.Println(" Starting SecureFlow agent...")
 	logCh := make(chan logs.Producer_msg,100)
 	NetworkCh := make(chan []logs.FlowRule,20)
 	SyscallCh := make(chan []logs.SyscallEventRule,100)
@@ -46,8 +46,7 @@ func main() {
 
 	<-stop // wait for termination signal
 	
-	log.Println("🛑 Shutting down SecureFlow agent...")
+	log.Println(" Shutting down SecureFlow agent...")
 	
-	
-	// log.Println("🛑 Agent stopped.")
+
 }
